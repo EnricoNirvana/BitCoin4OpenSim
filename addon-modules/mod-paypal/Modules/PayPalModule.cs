@@ -61,6 +61,9 @@ namespace PayPal
     public class PayPalModule : ISharedRegionModule, IMoneyModule
     {
         private string m_ppurl = "www.paypal.com";
+        private string m_ppprotocol = "https";
+        private string m_pprequesturi = "/cgi-bin/webscr";
+
         // Change to www.sandbox.paypal.com for testing.
         private bool m_active;
         private bool m_enabled;
@@ -316,7 +319,7 @@ namespace PayPal
             // Ouch. (This is the PayPal Request URL)
             // TODO: Add in a return page
             // TODO: Add in a cancel page
-            string url = "https://" + m_ppurl + "/cgi-bin/webscr?cmd=_xclick" + "&business=" +
+            string url = m_ppprotocol+"://" + m_ppurl + m_pprequesturi+"?cmd=_xclick" + "&business=" +
                 HttpUtility.UrlEncode (txn.SellersEmail) + "&item_name=" + HttpUtility.UrlEncode (txn.Description) +
                     "&item_number=" + HttpUtility.UrlEncode (txn.TxID.ToString ()) + "&amount=" +
                     HttpUtility.UrlEncode (String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount))) +
@@ -388,8 +391,8 @@ namespace PayPal
             
             string modifiedPost = originalPost + "&cmd=_notify-validate";
             
-            HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create ("https://" + m_ppurl +
-                                                                               "/cgi-bin/webscr");
+            HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create (m_ppprotocol+"://" + m_ppurl +
+                                                                               m_pprequesturi);
             httpWebRequest.Method = "POST";
             
             httpWebRequest.ContentLength = modifiedPost.Length;
@@ -510,6 +513,8 @@ namespace PayPal
             }
 
             m_ppurl = config.GetString ("PayPalURL", m_ppurl);
+            m_ppprotocol = config.GetString ("PayPalProtocol", m_ppprotocol);
+            m_pprequesturi = config.GetString ("PayPalRequestURI", m_pprequesturi);
 
             m_allowGridEmails = config.GetBoolean ("AllowGridEmails", false);
             m_allowGroups = config.GetBoolean ("AllowGroups", false);
