@@ -50,8 +50,10 @@ using Nwc.XmlRpc;
 
 using Mono.Addins;
 
+/*
 [assembly: Addin("PayPal", "0.1")]
 [assembly: AddinDependency("OpenSim", "0.5")]
+*/
 
 namespace PayPal
 {
