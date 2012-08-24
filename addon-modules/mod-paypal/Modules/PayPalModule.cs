@@ -64,9 +64,9 @@ namespace PayPal
         private string m_ppprotocol = "https";
         private string m_pprequesturi = "/cgi-bin/webscr";
 
-        private string m_btcurl = "www.paypal.com";
+        private string m_btcurl = "";
         private string m_btcprotocol = "https";
-        private string m_btcrequesturi = "/cgi-bin/webscr";
+        private string m_btcrequesturi = "/payment-server/bitcoin_payment_handler.php";
 
         // Change to www.sandbox.paypal.com for testing.
         private bool m_active;
