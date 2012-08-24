@@ -352,14 +352,14 @@ namespace PayPal
 
             
             Dictionary<string, string> replacements = new Dictionary<string, string> ();
-            replacements.Add ("{ITEM}", txn.Description);
-            replacements.Add ("{AMOUNT}", String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount)));
-            replacements.Add ("{AMOUNTOS}", txn.Amount.ToString ());
-            replacements.Add ("{CURRENCYCODE}", "USD");
+            replacements.Add ("{ITEM}",  HttpUtility.HtmlEncode(txn.Description));
+            replacements.Add ("{AMOUNT}", HttpUtility.HtmlEncode(String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount))));
+            replacements.Add ("{AMOUNTOS}", HttpUtility.HtmlEncode(txn.Amount.ToString ()));
+            replacements.Add ("{CURRENCYCODE}", HttpUtility.HtmlEncode("USD"));
             replacements.Add ("{BILLINGLINK}", url);
             replacements.Add ("{BTCBILLINGLINK}", btcurl);
-            replacements.Add ("{OBJECTID}", txn.ObjectID.ToString ());
-            replacements.Add ("{SELLEREMAIL}", txn.SellersEmail);
+            replacements.Add ("{OBJECTID}", HttpUtility.HtmlEncode(txn.ObjectID.ToString ()));
+            replacements.Add ("{SELLEREMAIL}", HttpUtility.HtmlEncode(txn.SellersEmail));
             
             string template;
             
