@@ -347,10 +347,21 @@ class BitcoinAddress {
 			return $address;
 		}
 
-		return false;
+		// No free addresses found.
+		// Try to create one with an address->email service.
+		if (!$btc_address = BitcoinAddressForEmailService::BTCAddressForEmail($av)) {
+			return false;
+		}
 
-		// TODO: Look up the address from a list
-		//return '1L5yiXZCjUrvfPr5LPFFqnJdW9fcecBojS';
+		$address = new BitcoinAddress($mysqli);
+		$address->btc_address = $btc_address;
+		$address->avatar_uuid = $av;
+
+		if ($address->insert()) {
+			return $address->btc_address;
+		}
+
+		return false;
 
 	}
 
@@ -807,6 +818,7 @@ class BitcoinNotificationService {
 
 }
 
+
 class BitcoinExchangeRateService {
 
 	var $_service_name;
@@ -899,6 +911,81 @@ class BitcoinExchangeRateService {
 		}
 
 		return 0;
+
+	}
+
+}
+
+class BitcoinAddressForEmailService {
+
+	var $_service_name;
+	var $_config;
+
+	// TODO: Cache the data so we don't have to hit the same service for every transaction.
+
+	function ForServiceName($service_name) {
+
+		// TODO: This should check if there's a more specific class defined
+		return new BitcoinAddressForEmailService($service_name);
+
+	}
+
+	function BitcoinAddressForEmailService($service_name) {
+
+		$configs = unserialize(OPENSIM_BITCOIN_ADDRESS_FOR_EMAIL_SERVICES);
+		if (!isset($configs[$service_name])) {
+			return false;
+		}
+
+		$this->_config = $configs[$service_name];
+		$this->_service_name = $service_name;	
+
+		return true;
+
+	}
+
+	function btc_address_for_email($email_address) {
+
+		if (!$url = $this->_config['url']) {
+			return 0;
+		}
+
+		$data =  'to='.urlencode($email_address);
+		$data .= '&from='.urlencode(OPENSIM_BITCOIN_ADDRESS_FOR_EMAIL_PAYER_NAME);
+		$data .= '&message='.urlencode(OPENSIM_BITCOIN_ADDRESS_FOR_EMAIL_MESSAGE_TEXT);
+
+		// TODO: Need to hit a proper API, not just the front-end...
+
+		if (!$response = BitcoinWebServiceClient::Http_response( $url, $data, array() )) {
+			return null;
+		}
+
+		//if (preg_match('/$^.*bitcoin\:(.*?)\"/m', $response, $matches)) {
+		//}
+		if (preg_match('/bitcoin\:(.*?)\"/m', $response, $matches)) {
+			return $matches[1];
+		} else {
+			//print "no match";
+		}
+
+		return null;
+
+	}
+
+	function BTCAddressForEmail($email_address) {
+
+		if (!$email_address) {
+			return null;
+		}
+
+		foreach( unserialize(OPENSIM_BITCOIN_ADDRESS_FOR_EMAIL_SERVICES) as $service_name => $service_settings) {
+			$address_service = BitcoinAddressForEmailService::ForServiceName($service_name);
+			if ($btc_address = $address_service->btc_address_for_email($email_address)) {
+				return $btc_address;
+			}
+		}
+
+		return null;
 
 	}
 
