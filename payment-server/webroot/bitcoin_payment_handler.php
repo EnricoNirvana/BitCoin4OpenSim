@@ -29,9 +29,9 @@ if ( $cmd == 'notify' ) {
 
 	handle_completion_ping($mysqli);
 
-} else if ( $cmd == 'register' ) {
-
+} else if ( $cmd == 'initialize_transaction' ) {
 	// TODO: Handle a notification directly from the OpenSim server.
+	initialize_transaction($mysqli);
 
 } else if ( $cmd == '_notify-validate') {
 
@@ -79,6 +79,34 @@ function show_address_page($mysqli, $btc_session_id) {
 	$page = str_replace('{BTC_COUNT_USABLE_ADDRESSES}', htmlentities($count_usable_addresses), $page);
 
 	print $page;
+	exit;
+
+}
+
+function initialize_transaction($mysqli) {
+
+	$btc_transaction = new BitcoinTransaction($mysqli);
+
+	// Better to use POST here.
+	// For now let GET work as well in case we want to run this code using the unhacked money server with just the URL changed.
+	//$params = $_POST;
+
+	$content = file_get_contents("php://input");
+	parse_str($content, $params);
+
+	$btc_transaction->transaction_code = $params['item_number'];
+	$btc_transaction->payee = $params['business'];
+	$btc_transaction->item_name = $params['item_name'];
+	$btc_transaction->original_amount = $params['amount'];
+	$btc_transaction->original_currency_code = $params['currency_code'];
+	$btc_transaction->notify_url = $params['notify_url'];
+	$btc_transaction->num_confirmations_required = 0; // TODO: We may get this from the server
+
+	if (!$btc_transaction->initialize()) {
+		print_simple_and_exit("Error: I was unable to initialize this transaction.");
+	}
+
+	print_simple_and_exit("OK", 200);
 	exit;
 
 }

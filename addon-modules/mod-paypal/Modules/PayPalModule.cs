@@ -216,6 +216,8 @@ namespace PayPal
             
             string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
             
+	    initializeBitcoinTransaction(txn, baseUrl);
+
             user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm payment?", "http://" +
                               baseUrl + "/pp/?txn=" + txn.TxID);
         }
@@ -856,9 +858,52 @@ namespace PayPal
             
             string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
 
+	    initializeBitcoinTransaction(txn, baseUrl);
+
             user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm purchase?", "http://" +
                               baseUrl + "/pp/?txn=" + txn.TxID);
         }
+
+	private bool initializeBitcoinTransaction(PayPalTransaction txn, string baseUrl) {
+
+	    // Hard-coding this for now - may end up building everything into mono, in which case it will go away.
+	    string bitcoin_server =  m_btcprotocol + "://" + m_btcurl + m_btcrequesturi + "?cmd=initialize_transaction"; 
+
+            string post_data = ""
+		+ "business="       +HttpUtility.HtmlEncode (txn.SellersEmail)
+		+ "&item_name="     +HttpUtility.HtmlEncode (txn.Description)
+		+ "&item_number="   +HttpUtility.HtmlEncode (txn.TxID.ToString ())
+		+ "&amount="        +HttpUtility.HtmlEncode (String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount)))
+		+ "&notify_url="    +HttpUtility.HtmlEncode ("http://" + baseUrl + "/btcipn/")
+		+ "&currency_code=" +HttpUtility.HtmlEncode ("USD")
+		+ "&sim_base_url="  +HttpUtility.HtmlEncode ("http://" + baseUrl)
+		+ "&btc_session_id="+HttpUtility.HtmlEncode ( GetSessionKey( txn.From ).ToString() )
+		+ "";
+ 
+            HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create (bitcoin_server);
+            httpWebRequest.Method = "POST";
+            
+            httpWebRequest.ContentLength = post_data.Length;
+            StreamWriter streamWriter = new StreamWriter (httpWebRequest.GetRequestStream ());
+            streamWriter.Write (post_data);
+            streamWriter.Close ();
+            
+            string response;
+            
+            HttpWebResponse httpWebResponse = (HttpWebResponse)httpWebRequest.GetResponse ();
+            using (StreamReader streamReader = new StreamReader (httpWebResponse.GetResponseStream ())) {
+                response = streamReader.ReadToEnd ();
+                streamReader.Close ();
+            }
+            
+            if (httpWebResponse.StatusCode != HttpStatusCode.OK) {
+                m_log.Error ("[PayPal] Bitcoin transaction initialzation != 200. Aborting.");
+                return false;
+            }
+
+	    return true;
+
+	}
 
         public void requestPayPrice (IClientAPI client, UUID objectID)
         {
@@ -1011,6 +1056,8 @@ namespace PayPal
                 m_transactionsInProgress.Add (txn.TxID, txn);
             
             string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
+
+	    initializeBitcoinTransaction(txn, baseUrl);
             
             user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm payment?", "http://" +
                               baseUrl + "/pp/?txn=" + txn.TxID);
