@@ -199,6 +199,7 @@ function handle_notify_validate($mysqli, $params) {
 	$body .= "&mc_currency=USD";  // TODO: Sort this out. It should probably be configurable at the PayPal end.
 	$body .= "&item_number=".$transaction->transaction_code; 
 	$body .= "&mc_gross=".$transaction->btc_amount; 
+	$body .= "&business=".$transaction->payee; 
 
 	//header($header);
 	print $body;
@@ -623,6 +624,7 @@ class BitcoinTransaction {
 		$body .= "&payment_status=Completed";
 		$body .= "&mc_currency=USD";  // TODO: Sort this out. It should probably be configurable at the PayPal end.
 		$body .= "&mc_gross=".$this->btc_amount; 
+		$body .= "&business=".$this->payee; 
 
 		if (!$response = BitcoinWebServiceClient::Http_response($url, $body, array())) {
 			print_simple_and_exit("Could not contact sim to notify it.");
