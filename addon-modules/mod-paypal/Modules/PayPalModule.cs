@@ -33,6 +33,7 @@ using System.IO;
 using System.Net;
 using System.Reflection;
 using System.Web;
+using System.Security.Cryptography;
 using log4net;
 using Nini.Config;
 using OpenMetaverse;
@@ -77,6 +78,15 @@ namespace PayPal
 
         private static readonly ILog m_log = LogManager.GetLogger (MethodBase.GetCurrentMethod ().DeclaringType);
         private readonly Dictionary<UUID, string> m_usersemail = new Dictionary<UUID, string> ();
+
+	// We'll keep our own session key for each user we encounter.
+	// This will be used in the URL when we show people the Bitcoin transaction pages...
+	// ...allowing us to verify their email address when they register new Bitcoin addresses.
+	// In future we may also create an option for a separate client process to talk to us
+	// ...to find out about payment requests directly, without passing information in a URL.
+        private readonly Dictionary<UUID, UUID> m_usersessionkey= new Dictionary<UUID, UUID> ();
+	// Keep a dictionary with the opposite mapping for quick lookups
+        private readonly Dictionary<UUID, UUID> m_sessionkeyuser= new Dictionary<UUID, UUID> ();
 
         private IConfigSource m_config;
 
@@ -338,18 +348,18 @@ namespace PayPal
             // The URL for Bitcoin will be modelled on the PayPal one.
             // This will allow us use a common Bitcoin page handler whether or not we've hacked this.
             // It'll just throw away arguments it doesn't need.
-            string btcurl = m_btcprotocol+"://" + m_btcurl + m_btcrequesturi+"?cmd=_xclick"+ "&business=" +
-		HttpUtility.UrlEncode (txn.SellersEmail) + "&item_name=" + HttpUtility.UrlEncode (txn.Description) +
-                    "&item_number=" + HttpUtility.UrlEncode (txn.TxID.ToString ()) + "&amount=" +
-                    HttpUtility.UrlEncode (String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount))) +
-                    "&page_style=" + HttpUtility.UrlEncode ("Paypal") + "&no_shipping=" +
-                    HttpUtility.UrlEncode ("1") + "&return=" + HttpUtility.UrlEncode ("http://" + baseUrl + "/") +
-                    "&cancel_return=" + HttpUtility.UrlEncode ("http://" + baseUrl + "/") + "&notify_url=" +
-                    HttpUtility.UrlEncode ("http://" + baseUrl + "/ppipn/") + "&no_note=" +
-                    HttpUtility.UrlEncode ("1") + "&currency_code=" + HttpUtility.UrlEncode ("USD") + "&lc=" +
-                    HttpUtility.UrlEncode ("US") + "&bn=" + HttpUtility.UrlEncode ("PP-BuyNowBF") + "&charset=" +
-                    HttpUtility.UrlEncode ("UTF-8") + "";
+            string btcurl = m_btcprotocol+"://" + m_btcurl + m_btcrequesturi+"?cmd=_xclick";
 
+            string btcfields = ""
+		+ "<input type=\"hidden\" name=\"business\" value=\""+HttpUtility.HtmlEncode (txn.SellersEmail)+"\" />"
+		+ "<input type=\"hidden\" name=\"item_name\" value=\""+HttpUtility.HtmlEncode (txn.Description)+"\" />"
+		+ "<input type=\"hidden\" name=\"item_number\" value=\""+HttpUtility.HtmlEncode (txn.TxID.ToString ())+"\" />"
+		+ "<input type=\"hidden\" name=\"amount\" value=\""+HttpUtility.HtmlEncode (String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount)))+"\" />"
+		+ "<input type=\"hidden\" name=\"notify_url\" value=\""+HttpUtility.HtmlEncode ("http://" + baseUrl + "/btcipn/")+"\" />"
+		+ "<input type=\"hidden\" name=\"currency_code\" value=\""+HttpUtility.HtmlEncode ("USD")+"\" />"
+		+ "<input type=\"hidden\" name=\"sim_base_url\" value=\""+HttpUtility.HtmlEncode ("http://" + baseUrl)+"\" />"
+		+ "<input type=\"hidden\" name=\"btc_session_id\" value=\""+HttpUtility.HtmlEncode ( GetSessionKey( txn.From ).ToString() )+"\" />";
+		
             
             Dictionary<string, string> replacements = new Dictionary<string, string> ();
             replacements.Add ("{ITEM}",  HttpUtility.HtmlEncode(txn.Description));
@@ -358,6 +368,7 @@ namespace PayPal
             replacements.Add ("{CURRENCYCODE}", HttpUtility.HtmlEncode("USD"));
             replacements.Add ("{BILLINGLINK}", url);
             replacements.Add ("{BTCBILLINGLINK}", btcurl);
+            replacements.Add ("{BTCBILLINGHIDDENFIELDS}", btcfields);
             replacements.Add ("{OBJECTID}", HttpUtility.HtmlEncode(txn.ObjectID.ToString ()));
             replacements.Add ("{SELLEREMAIL}", HttpUtility.HtmlEncode(txn.SellersEmail));
             
@@ -390,6 +401,62 @@ namespace PayPal
                 m_log.Debug ("[PayPal] '" + str.Key + "' = '" + (string)str.Value + "'");
             }
         }
+
+	public Hashtable BuyerInfo (Hashtable request) 
+	{
+            Dictionary<string, object> postvals = ServerUtils.ParseQueryString ((string)request["body"]);
+
+	    Hashtable reply = new Hashtable ();
+            reply["content_type"] = "text/html";
+
+	    if (!postvals.ContainsKey("btc_session_id")) {
+               reply["int_response_code"] = 403;
+               reply["str_response_string"] = "Forbidden due to missing session ID";
+	       return reply;
+	    }
+
+ 	    UUID buyerID;
+	    UUID sessKey = new UUID ((string)postvals["btc_session_id"]);
+
+	    if (m_sessionkeyuser.ContainsKey(sessKey)) {
+	        buyerID = m_sessionkeyuser[sessKey];
+	    } else {
+               reply["int_response_code"] = 404;
+               reply["str_response_string"] = "Buyer not found - maybe session has expired?";
+	       return reply;
+	    }
+
+            string email;
+	    if (!GetEmail (m_scenes[0].RegionInfo.ScopeID, buyerID, out email)) {
+               reply["int_response_code"] = 404;
+               reply["str_response_string"] = "Buyer not found or lacks email address";
+	       return reply;
+            }
+
+	    /*
+	    IUserAccountService userAccountService = m_scenes[0].UserAccountService;
+	    UserAccount ua;
+	    
+	    ua = userAccountService.GetUserAccount (buyerID, "", "");
+            if (ua == null) {
+               reply["int_response_code"] = 404;
+               reply["str_response_string"] = "Buyer not found";
+	       return reply;
+	    }
+
+            if ( string.IsNullOrEmpty (ua.Email) ) {
+               reply["int_response_code"] = 404;
+               reply["str_response_string"] = "Buyer or lacks email address";
+	    }
+
+	    string buyer_email = ua.Email;
+            */	
+
+            reply["int_response_code"] = 200;
+            reply["str_response_string"] = email;
+	    return reply;
+
+	}
 
         public Hashtable IPN (Hashtable request)
         {
@@ -995,6 +1062,29 @@ namespace PayPal
             return ret;
         }
 
+	// Return a money-server-specific session key for the user
+	// ...creating it and adding it to m_usersessionkey in the process if it doesn't already exist.
+	// TODO: Figure out if this dictionary is supposed to be locked or something.
+	private UUID GetSessionKey(UUID userkey)
+	{
+            if (m_usersessionkey.ContainsKey(userkey)) {
+                return m_usersessionkey[userkey];
+	    }
+
+            byte[] randomBuf = new byte[16];
+            RNGCryptoServiceProvider random = new RNGCryptoServiceProvider();
+            random.GetBytes(randomBuf);
+            Guid sID = new Guid(randomBuf);
+
+	    UUID userUUID = new UUID(sID);
+
+	    m_usersessionkey.Add(userkey, userUUID);
+	    m_sessionkeyuser.Add(userUUID, userkey);
+
+            return userUUID;
+
+	}
+
         private bool GetEmail (UUID scope, UUID key, out string email)
         {
             if (m_usersemail.TryGetValue (key, out email))
@@ -1177,6 +1267,12 @@ namespace PayPal
             // Add HTTP Handlers (user, then PP-IPN)
             MainServer.Instance.AddHTTPHandler ("/pp/", UserPage);
             MainServer.Instance.AddHTTPHandler ("/ppipn/", IPN);
+
+	    // For now Bitcoin uses the same IPN as PayPal. But we'll give it a different URL to make it clear what's going on.
+            MainServer.Instance.AddHTTPHandler ("/btcipn/", IPN); 
+
+	    // Allow the Bitcoin server to ask us for the email and UUID of the buyer.
+            MainServer.Instance.AddHTTPHandler ("/btcbuyerinfo/", BuyerInfo); 
             
             // XMLRPC Handlers for Standalone
             MainServer.Instance.AddXmlRPCHandler ("getCurrencyQuote", quote_func);

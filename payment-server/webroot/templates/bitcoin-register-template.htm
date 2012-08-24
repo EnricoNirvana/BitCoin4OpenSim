@@ -122,7 +122,8 @@
 		<form method="POST" action="bitcoin_payment_handler.php?cmd=process_address_page">
 			<textarea style="width:370px; height:200px;" name="addresses">
 			</textarea>
-			<input type="hidden" name="sessionid" value="{BTC_SESSION_ID}" />
+			<input type="hidden" name="btc_session_id" value="{BTC_SESSION_ID}" />
+			<input type="hidden" name="sim_base_url" value="{BTC_SIM_BASE_URL}" />
 			<input type="submit" name="submit" value="Register addresses" />
 		</form>
 	</div>

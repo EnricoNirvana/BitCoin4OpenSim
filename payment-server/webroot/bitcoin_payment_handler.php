@@ -39,11 +39,11 @@ if ( $cmd == 'notify' ) {
 
 } else if ( $cmd == 'show_address_page' ) {
 	
-	show_address_page($mysqli);
+	show_address_page($mysqli, $_GET['btc_session_id']);
 
 } else if ( $cmd == 'process_address_page' ) {
 
-	process_address_page($mysqli, '');
+	process_address_page($mysqli);
 	
 } else if ( $cmd == '_xclick') {
 
@@ -57,14 +57,15 @@ if ( $cmd == 'notify' ) {
 
 }
 
-function show_address_page($mysqli, $sessionid) {
+function show_address_page($mysqli, $btc_session_id) {
 
 //payment-server/webroot/templates/bitcoin-register-template.htm  payment-server/webroot/templates/bitcoin-template.htm
 	$count_all_addresses = 0;
 	$count_usable_addresses = 0;
 
 	$page = file_get_contents(dirname(__FILE__).'/templates/bitcoin-register-template.htm');
-	$page = str_replace('{BTC_SESSION_ID}', htmlentities($sessionid), $page);
+	$page = str_replace('{BTC_SESSION_ID}', htmlentities($btc_session_id), $page);
+	$page = str_replace('{BTC_SIM_BASE_URL}', htmlentities($_REQUEST['sim_base_url']), $page);
 
 	$page = str_replace('{BTC_DISABLE_INCOMPLETE_START}', '<!--', $page);
 	$page = str_replace('{BTC_DISABLE_INCOMPLETE_END}', '-->', $page);
@@ -85,13 +86,20 @@ function show_address_page($mysqli, $sessionid) {
 function show_payment_web_page($mysqli) {
 
 	$btc_transaction = new BitcoinTransaction($mysqli);
-	$btc_transaction->transaction_code = $_GET['item_number'];
-	$btc_transaction->payee = $_GET['business'];
-	$btc_transaction->item_name = $_GET['item_name'];
-	$btc_transaction->original_amount = $_GET['amount'];
-	$btc_transaction->original_currency_code = $_GET['currency_code'];
-	$btc_transaction->notify_url = $_GET['notify_url'];
+
+	// Better to use POST here.
+	// For now let GET work as well in case we want to run this code using the unhacked money server with just the URL changed.
+	$params = isset($_POST['item_number']) ? $_POST : $_GET;
+
+	$btc_transaction->transaction_code = $params['item_number'];
+	$btc_transaction->payee = $params['business'];
+	$btc_transaction->item_name = $params['item_name'];
+	$btc_transaction->original_amount = $params['amount'];
+	$btc_transaction->original_currency_code = $params['currency_code'];
+	$btc_transaction->notify_url = $params['notify_url'];
 	$btc_transaction->num_confirmations_required = 0; // TODO: We may get this from the server
+
+	$btc_session_id = $_POST['btc_session_id'];
 
 	if (!$btc_transaction->initialize()) {
 		print_simple_and_exit("Error: I was unable to initialize this transaction.");
@@ -102,7 +110,8 @@ function show_payment_web_page($mysqli) {
 	$count_usable_addresses = 5;
 
 	$page = file_get_contents(dirname(__FILE__).'/templates/bitcoin-pay-template.htm');
-	$page = str_replace('{BTC_SESSION_ID}', htmlentities($sessionid), $page);
+	$page = str_replace('{BTC_SESSION_ID}', htmlentities($btc_session_id), $page);
+	$page = str_replace('{BTC_SIM_BASE_URL}', htmlentities($params['sim_base_url']), $page);
 	$page = str_replace('{BTC_AMOUNT}', htmlentities($btc_transaction->btc_amount), $page);
 	$page = str_replace('{BTC_ADDRESS}', htmlentities($btc_transaction->btc_address), $page);
 
@@ -120,7 +129,17 @@ function process_address_page($mysqli) {
 	// TODO: Sort this out - need to get the address and verify it somehow...
 	// originally was supposed to be avatars, currently using emails
 	// should rename if we stick with email
-	$avatar_uuid = 'someuser@example.com';
+	if (!$btc_session_id = $_POST['btc_session_id']) {
+		print_simple_and_exit("Error: Session ID missing");
+	}
+	if (!$sim_base_url = $_POST['sim_base_url']) {
+		print_simple_and_exit("Error: Sim base URL missing");
+	}
+
+	$email = BitcoinWebServiceClient::Http_response($sim_base_url.'/btcbuyerinfo/', "btc_session_id=".$btc_session_id, array());
+	if (!$email) {
+		print_simple_and_exit("Error: Could not find email - maybe logged out?");
+	}
 
 	$addresstext = $_POST['addresses'];
 	$format = 'plain';
@@ -151,7 +170,7 @@ function process_address_page($mysqli) {
 	foreach($addresses as $address) {
 		$bitcoin_address = new BitcoinAddress($mysqli);
 		$bitcoin_address->btc_address = $address;
-		$bitcoin_address->avatar_uuid = $avatar_uuid;
+		$bitcoin_address->avatar_uuid = $email;
 		// This may fail if it's a duplicate. 
 		if ($bitcoin_address->insert()) {
 			$addresses_created[] = $address;
@@ -164,7 +183,7 @@ function process_address_page($mysqli) {
 	$count_usable_addresses = 0;
 
 	$page = file_get_contents(dirname(__FILE__).'/templates/bitcoin-register-template.htm');
-	$page = str_replace('{BTC_SESSION_ID}', htmlentities($sessionid), $page);
+	$page = str_replace('{BTC_SESSION_ID}', htmlentities($btc_session_id), $page);
 
 	$page = str_replace('{BTC_DISABLE_COMPLETE_START}', '<!--', $page);
 	$page = str_replace('{BTC_DISABLE_COMPLETE_END}', '-->', $page);
@@ -602,6 +621,7 @@ class BitcoinTransaction {
 		}	
 
 		if ( !( $this->populate() || $this->create() ) ) {
+			print_simple_and_exit("Could not populate or create");
 			return false;
 		}
 
@@ -891,15 +911,6 @@ class BitcoinExchangeRateService {
 			return 0;
 		}
 
-		// TODO: We're getting the headers here for some reason.
-		// Stripping them out for now, but we should be able to get a body without headers in the first place somehow.
-		if (preg_match("/^.*?(\{.*\}).*?$/m", $response, $matches)) {
-			$response = $matches[1];
-		} else {
-			//print "no match";
-			exit;
-		}
-
 		if (!$json = json_decode($response, true)) {
 			return 0;
 		}
@@ -1007,8 +1018,10 @@ class BitcoinWebServiceClient {
 		$ch = curl_init();
 		curl_setopt($ch, CURLOPT_URL, $url);
 
-		curl_setopt($ch, CURLOPT_HEADER, TRUE);
-		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+		if (count($headers)) {
+			curl_setopt($ch, CURLOPT_HEADER, TRUE);
+			curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+		}
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
 
 		curl_setopt($ch, CURLOPT_POST, 1); // set POST method
