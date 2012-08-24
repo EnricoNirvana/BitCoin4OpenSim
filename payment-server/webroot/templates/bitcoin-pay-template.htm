@@ -1,7 +1,7 @@
 <!-- Sample Layout File for Mod-PayPal -->
 <html>
 	<head>
-		<title>Transaction Uses PayPal or Bitcoin</title>
+		<title>Pay using Bitcoin</title>
 		<style>
 			body {
 				margin: 0px 0px 0px 0px;
@@ -101,25 +101,18 @@
 		</style>
 	</head>
 	<div id="header">
-		<h1>Pay with PayPal or Bitcoin</h1>
-	</div>
-	<div id="warning">
-		<h2>Experimental Warning</h2>
-		<p style="margin-bottom: 0px; font-size: 0.8em">This is experimental. Please do not use in production.</p>
+		<h1>Pay with Bitcoin</h1>
 	</div>
 
 	<div id="content">
-		<p>Purchasing {ITEM} will cost {AMOUNT} {CURRENCYCODE}.</p>
-		<p>To proceed with this payment, please click the following link. The region will be notified when payment has completed to fill any applicable services.</p>
-		<p style="text-align: right; margin-bottom: 0px;"><a href="{BTCBILLINGLINK}">Pay with Bitcoin</a></p>
+		<p>Please pay {BTC_AMOUNT} Bitcoins to the following address:</p>
+		<p style="font-weight: bold;">{BTC_ADDRESS}</p>
+		<p>The region will be notified when payment has completed to fill any applicable services.</p>
 	</div>
 
 	<div id="content">
-		<p>Purchasing {ITEM} will cost {AMOUNT} {CURRENCYCODE}.</p>
-		<p style="font-weight: bold;">This will be billed in {CURRENCYCODE} from your Credit Card or Bank Account via PayPal.</p>
-		<!-- <p>Billing of this purchase will be handled by PayPal, which allows you to purchase items online securely without revealing your credit card or bank information to the merchant.</p> -->
-		<p>To proceed with this payment, please click the following link. The region will be notified when payment has completed to fill any applicable services.</p>
-		<p style="text-align: right; margin-bottom: 0px;"><a href="{BILLINGLINK}">Pay with PayPal</a></p>
+		<p>If you want to <strong>receive</strong> money in Bitcoin in the future, it is useful to <a href="bitcoin_payment_handler.php?cmd=show_address_page&sessionid={BTC_SESSION_ID}">register some Bitcoin addresses</a>.</p>
+		<p>We currently have {BTC_COUNT_ALL_ADDRESSES} addresses on file for you, of which {BTC_COUNT_USABLE_ADDRESSES} are currently available.</p>
 	</div>
 	<div id="footer">
 		<p style="font-size: 0.7em;">This transaction uses <a href="http://github.com/edmundedgar/Mod-Bitcoin">Mod-Bitcoin</a>, a Module for <a href="http://www.opensimulator.org">OpenSimulator</a> which enables PayPal and Bitcoin currency support. Please note that the developers of this module cannot provide support and is not involved in any way with this purchase.</p>

@@ -43,7 +43,7 @@ if ( $cmd == 'notify' ) {
 
 } else if ( $cmd == 'process_address_page' ) {
 
-	process_address_page($mysqli);
+	process_address_page($mysqli, '');
 	
 } else if ( $cmd == '_xclick') {
 
@@ -53,23 +53,32 @@ if ( $cmd == 'notify' ) {
 
 } else {
 
-	error_log("No cmd specified - cmd was ::$cmd::");
 	print_simple_and_exit("No cmd specified ($cmd) ".file_get_contents("php://input")."::");
 
 }
 
-function show_address_page($mysqli) {
+function show_address_page($mysqli, $sessionid) {
 
-	print '<html>';
-	print '<head><title>Enter addresses</title></head>';
-	print '<body>';
-	print '<form method="POST" action="bitcoin_payment_handler.php?cmd=process_address_page">';
-	print '<textarea name="addresses">';
-	print '</textarea>';
-	print '<input type="submit" name="submit" value="Register addresses" />';
-	print '</form';
-	print '</body>';
-	print '</html>';
+//payment-server/webroot/templates/bitcoin-register-template.htm  payment-server/webroot/templates/bitcoin-template.htm
+	$count_all_addresses = 0;
+	$count_usable_addresses = 0;
+
+	$page = file_get_contents(dirname(__FILE__).'/templates/bitcoin-register-template.htm');
+	$page = str_replace('{BTC_SESSION_ID}', htmlentities($sessionid), $page);
+
+	$page = str_replace('{BTC_DISABLE_INCOMPLETE_START}', '<!--', $page);
+	$page = str_replace('{BTC_DISABLE_INCOMPLETE_END}', '-->', $page);
+
+	$page = str_replace('{BTC_DISABLE_COMPLETE_START}', '', $page);
+	$page = str_replace('{BTC_DISABLE_COMPLETE_END}', '', $page);
+
+	$page = str_replace('{BTC_COUNT_NEW_ADDRESSES}', 0, $page);
+
+	$page = str_replace('{BTC_COUNT_ALL_ADDRESSES}', htmlentities($count_all_addresses), $page);
+	$page = str_replace('{BTC_COUNT_USABLE_ADDRESSES}', htmlentities($count_usable_addresses), $page);
+
+	print $page;
+	exit;
 
 }
 
@@ -88,7 +97,20 @@ function show_payment_web_page($mysqli) {
 		print_simple_and_exit("Error: I was unable to initialize this transaction.");
 	}
 
-	echo "Please pay ".$btc_transaction->btc_amount." BTC to the address ".htmlentities($btc_transaction->btc_address);
+	// TODO: Fetch a count of addresses
+	$count_all_addresses = 10;
+	$count_usable_addresses = 5;
+
+	$page = file_get_contents(dirname(__FILE__).'/templates/bitcoin-pay-template.htm');
+	$page = str_replace('{BTC_SESSION_ID}', htmlentities($sessionid), $page);
+	$page = str_replace('{BTC_AMOUNT}', htmlentities($btc_transaction->btc_amount), $page);
+	$page = str_replace('{BTC_ADDRESS}', htmlentities($btc_transaction->btc_address), $page);
+
+	$page = str_replace('{BTC_COUNT_ALL_ADDRESSES}', htmlentities($count_all_addresses), $page);
+	$page = str_replace('{BTC_COUNT_USABLE_ADDRESSES}', htmlentities($count_usable_addresses), $page);
+
+	//echo "Please pay ".$btc_transaction->btc_amount." BTC to the address ".htmlentities($btc_transaction->btc_address);
+	echo $page;
 	exit;
 
 }
@@ -138,8 +160,25 @@ function process_address_page($mysqli) {
 		}
 	}
 
-	var_dump($addresses_created);
-	var_dump($addresses_failed);
+	$count_all_addresses = 0;
+	$count_usable_addresses = 0;
+
+	$page = file_get_contents(dirname(__FILE__).'/templates/bitcoin-register-template.htm');
+	$page = str_replace('{BTC_SESSION_ID}', htmlentities($sessionid), $page);
+
+	$page = str_replace('{BTC_DISABLE_COMPLETE_START}', '<!--', $page);
+	$page = str_replace('{BTC_DISABLE_COMPLETE_END}', '-->', $page);
+
+	$page = str_replace('{BTC_DISABLE_INCOMPLETE_START}', '', $page);
+	$page = str_replace('{BTC_DISABLE_INCOMPLETE_END}', '', $page);
+
+	$page = str_replace('{BTC_COUNT_NEW_ADDRESSES}', count($addresses_created), $page);
+
+	$page = str_replace('{BTC_COUNT_ALL_ADDRESSES}', htmlentities($count_all_addresses), $page);
+	$page = str_replace('{BTC_COUNT_USABLE_ADDRESSES}', htmlentities($count_usable_addresses), $page);
+
+	print $page;
+	exit;
 
 }
 
@@ -419,7 +458,7 @@ class BitcoinTransaction {
 			$this->btc_amount = $this->original_amount;
 		} else {
 			if (!$this->btc_amount = $this->to_btc($this->original_amount, $this->original_currency_code)) {
-				print "btc amount for ".$this->original_amount." ".$this->original_currency_code." is ".$this->btc_amount ;
+				//print "btc amount for ".$this->original_amount." ".$this->original_currency_code." is ".$this->btc_amount ;
 				return false;
 			}
 		}
@@ -663,12 +702,12 @@ class BitcoinNotificationService {
 	function subscriptionURL() {
 
 		if (!$agent_id = $this->_agent_id) {
-			print "Could not make subscription URL: no agent_id";
+			//print "Could not make subscription URL: no agent_id";
 			return '';
 		}
 
 		if (!$base_url = $this->_config['base_url']) {
-			print "Could not find base_url";
+			//print "Could not find base_url";
 			return '';
 		}
 
@@ -684,17 +723,17 @@ class BitcoinNotificationService {
 	function subscribe($address, $confirmations) {
 
 		if (!$address) {
-			print "Could not subscribe, address not set.";
+			//print "Could not subscribe, address not set.";
 			return false;
 		}
 
 		if (!$this->initializeAgent()) {
-			print "Could not initialize agent";
+			//print "Could not initialize agent";
 			return false;
 		}
 
 		if (!$url = $this->subscriptionURL()) {
-			print "Could not make URL";
+			//print "Could not make URL";
 			return false;
 		}
 
@@ -806,7 +845,7 @@ class BitcoinExchangeRateService {
 		}
 
 		$btc_amount = ($amount / $rate);
-		print "returning $amount / $rate = $btc_amount";
+		//print "returning $amount / $rate = $btc_amount";
 		return $btc_amount;
 
 	}
@@ -843,7 +882,7 @@ class BitcoinExchangeRateService {
 		if (preg_match("/^.*?(\{.*\}).*?$/m", $response, $matches)) {
 			$response = $matches[1];
 		} else {
-			print "no match";
+			//print "no match";
 			exit;
 		}
 
@@ -868,12 +907,12 @@ class BitcoinWebServiceClient {
 	function Http_response($url, $data, $headers) {
 
 		/*
-		print "<h3>hitting url :$url:</h3>";
-		print "<hr>";
-		var_dump($data);
-		print "<hr>";
-		var_dump($headers);
-		print "<hr>";
+		//print "<h3>hitting url :$url:</h3>";
+		//print "<hr>";
+		//var_dump($data);
+		//print "<hr>";
+		//var_dump($headers);
+		//print "<hr>";
 		*/
 
 		$ch = curl_init();
