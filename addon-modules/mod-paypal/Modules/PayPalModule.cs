@@ -64,6 +64,10 @@ namespace PayPal
         private string m_ppprotocol = "https";
         private string m_pprequesturi = "/cgi-bin/webscr";
 
+        private string m_btcurl = "www.paypal.com";
+        private string m_btcprotocol = "https";
+        private string m_btcrequesturi = "/cgi-bin/webscr";
+
         // Change to www.sandbox.paypal.com for testing.
         private bool m_active;
         private bool m_enabled;
@@ -330,6 +334,22 @@ namespace PayPal
                     HttpUtility.UrlEncode ("1") + "&currency_code=" + HttpUtility.UrlEncode ("USD") + "&lc=" +
                     HttpUtility.UrlEncode ("US") + "&bn=" + HttpUtility.UrlEncode ("PP-BuyNowBF") + "&charset=" +
                     HttpUtility.UrlEncode ("UTF-8") + "";
+
+            // The URL for Bitcoin will be modelled on the PayPal one.
+            // This will allow us use a common Bitcoin page handler whether or not we've hacked this.
+            // It'll just throw away arguments it doesn't need.
+            string btcurl = m_btcprotocol+"://" + m_btcurl + m_btcrequesturi+"?cmd=_xclick"+ "&business=" +
+		HttpUtility.UrlEncode (txn.SellersEmail) + "&item_name=" + HttpUtility.UrlEncode (txn.Description) +
+                    "&item_number=" + HttpUtility.UrlEncode (txn.TxID.ToString ()) + "&amount=" +
+                    HttpUtility.UrlEncode (String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount))) +
+                    "&page_style=" + HttpUtility.UrlEncode ("Paypal") + "&no_shipping=" +
+                    HttpUtility.UrlEncode ("1") + "&return=" + HttpUtility.UrlEncode ("http://" + baseUrl + "/") +
+                    "&cancel_return=" + HttpUtility.UrlEncode ("http://" + baseUrl + "/") + "&notify_url=" +
+                    HttpUtility.UrlEncode ("http://" + baseUrl + "/ppipn/") + "&no_note=" +
+                    HttpUtility.UrlEncode ("1") + "&currency_code=" + HttpUtility.UrlEncode ("USD") + "&lc=" +
+                    HttpUtility.UrlEncode ("US") + "&bn=" + HttpUtility.UrlEncode ("PP-BuyNowBF") + "&charset=" +
+                    HttpUtility.UrlEncode ("UTF-8") + "";
+
             
             Dictionary<string, string> replacements = new Dictionary<string, string> ();
             replacements.Add ("{ITEM}", txn.Description);
@@ -337,6 +357,7 @@ namespace PayPal
             replacements.Add ("{AMOUNTOS}", txn.Amount.ToString ());
             replacements.Add ("{CURRENCYCODE}", "USD");
             replacements.Add ("{BILLINGLINK}", url);
+            replacements.Add ("{BTCBILLINGLINK}", btcurl);
             replacements.Add ("{OBJECTID}", txn.ObjectID.ToString ());
             replacements.Add ("{SELLEREMAIL}", txn.SellersEmail);
             
@@ -515,6 +536,10 @@ namespace PayPal
             m_ppurl = config.GetString ("PayPalURL", m_ppurl);
             m_ppprotocol = config.GetString ("PayPalProtocol", m_ppprotocol);
             m_pprequesturi = config.GetString ("PayPalRequestURI", m_pprequesturi);
+
+            m_btcurl = config.GetString ("PayPalBTCURL", m_btcurl);
+            m_btcprotocol = config.GetString ("PayPalBTCProtocol", m_btcprotocol);
+            m_btcrequesturi = config.GetString ("PayPalBTCRequestURI", m_btcrequesturi);
 
             m_allowGridEmails = config.GetBoolean ("AllowGridEmails", false);
             m_allowGroups = config.GetBoolean ("AllowGroups", false);

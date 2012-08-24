@@ -1,7 +1,7 @@
 <!-- Sample Layout File for Mod-PayPal -->
 <html>
 	<head>
-		<title>Transaction Requires PayPal</title>
+		<title>Transaction Uses PayPal or Bitcoin</title>
 		<style>
 			body {
 				margin: 0px 0px 0px 0px;
@@ -101,12 +101,20 @@
 		</style>
 	</head>
 	<div id="header">
-		<h1>Pay with PayPal</h1>
+		<h1>Pay with PayPal or Bitcoin</h1>
 	</div>
 	<div id="warning">
 		<h2>Experimental Warning</h2>
 		<p style="margin-bottom: 0px; font-size: 0.8em">This is experimental. Please do not use in production.</p>
 	</div>
+
+	<div id="content">
+		<p>Purchasing {ITEM} will cost {AMOUNT} {CURRENCYCODE}.</p>
+		<p style="font-weight: bold;">This will be billed in {CURRENCYCODE} from your Credit Card or Bank Account via PayPal.</p>
+		<p>To proceed with this payment, please click the following link. The region will be notified when payment has completed to fill any applicable services.</p>
+		<p style="text-align: right; margin-bottom: 0px;"><a href="{BTCBILLINGLINK}">Pay with Bitcoin</a></p>
+	</div>
+
 	<div id="content">
 		<p>Purchasing {ITEM} will cost {AMOUNT} {CURRENCYCODE}.</p>
 		<p style="font-weight: bold;">This will be billed in {CURRENCYCODE} from your Credit Card or Bank Account via PayPal.</p>
