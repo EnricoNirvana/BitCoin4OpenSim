@@ -15,3 +15,11 @@ define('OPENSIM_BITCOIN_PING_SERVICES', serialize(
 		)
 	)
 ));
+define('OPENSIM_BITCOIN_EXCHANGE_RATE_SERVICES', serialize(
+	array(
+		'bitcoincharts' => array(
+			'url' => 'http://bitcoincharts.com/t/weighted_prices.json'
+		)
+	)
+));
+

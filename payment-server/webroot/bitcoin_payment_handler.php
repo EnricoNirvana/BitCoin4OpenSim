@@ -95,8 +95,10 @@ function show_payment_web_page($mysqli) {
 
 function process_address_page($mysqli) {
 
-	// TODO: Sort this out...
-	$avatar_uuid = 'online@edochan.com';
+	// TODO: Sort this out - need to get the address and verify it somehow...
+	// originally was supposed to be avatars, currently using emails
+	// should rename if we stick with email
+	$avatar_uuid = 'someuser@example.com';
 
 	$addresstext = $_POST['addresses'];
 	$format = 'plain';
@@ -399,8 +401,10 @@ class BitcoinTransaction {
 	}
 
 	function to_btc($amount, $currency_code) {
-		// TODO: Look up the BTC value from somewhere.
-		return $amount;
+
+		$btc = BitcoinExchangeRateService::ToBTC($amount, $currency_code);
+		return $btc;
+
 	}
 
 	function create() {
@@ -414,7 +418,8 @@ class BitcoinTransaction {
 		if ($this->original_currency_code == 'BTC') {
 			$this->btc_amount = $this->original_amount;
 		} else {
-			if (!$this->btc_amount = $this->to_btc($this->original_amount, $this->currency_code)) {
+			if (!$this->btc_amount = $this->to_btc($this->original_amount, $this->original_currency_code)) {
+				print "btc amount for ".$this->original_amount." ".$this->original_currency_code." is ".$this->btc_amount ;
 				return false;
 			}
 		}
@@ -555,7 +560,7 @@ class BitcoinTransaction {
 		We should probably either subscripe to multiple services or have some logic to resubscribe transactions if we don't hear anything.
 		*/
 		foreach( unserialize(OPENSIM_BITCOIN_PING_SERVICES) as $service_name => $service_settings) {
-			$notification_service = BitcoinNotificationService::ForServiceName('bitcoinmonitor');
+			$notification_service = BitcoinNotificationService::ForServiceName($service_name);
 			if ($notification_service->subscribe($this->btc_address, $this->num_confirmations_required)) {
 				return true;
 			}
@@ -693,7 +698,7 @@ class BitcoinNotificationService {
 			return false;
 		}
 
-		print "subscribing";
+		//print "subscribing";
 		$config = $this->_config;
 
 		if (!$this->initializeAgent()) {
@@ -757,6 +762,103 @@ class BitcoinNotificationService {
 	function btc_amount() {
 		// Bitcoinmonitor gives us the amount in satoshis.
 		return ( $this->_body_json['signed_data']['amount'] / 100000000 );
+	}
+
+}
+
+class BitcoinExchangeRateService {
+
+	var $_service_name;
+	var $_config;
+
+	// TODO: Cache the data so we don't have to hit the same service for every transaction.
+
+	function ForServiceName($service_name) {
+
+		// TODO: This should check if there's a more specific class defined
+		return new BitcoinExchangeRateService($service_name);
+
+	}
+
+	function BitcoinExchangeRateService($service_name) {
+
+		$configs = unserialize(OPENSIM_BITCOIN_EXCHANGE_RATE_SERVICES);
+		if (!isset($configs[$service_name])) {
+			return false;
+		}
+
+		$this->_config = $configs[$service_name];
+		$this->_service_name = $service_name;	
+
+		return true;
+
+	}
+
+	// Return the BTC equivalent of the amount of money in the currency_code, or 0 if it couldn't be found.	
+	function ToBTC($amount, $currency_code) {
+
+		if (!$amount || !$currency_code) {
+			return 0;
+		}
+
+		if (!$rate = BitcoinExchangeRateService::BTCExchangeRate($currency_code)) {
+			return 0;
+		}
+
+		$btc_amount = ($amount / $rate);
+		print "returning $amount / $rate = $btc_amount";
+		return $btc_amount;
+
+	}
+
+	function BTCExchangeRate($currency_code) {
+
+		if ($currency_code == 'BTC') {
+			return 1;
+		}
+
+		foreach( unserialize(OPENSIM_BITCOIN_EXCHANGE_RATE_SERVICES) as $service_name => $service_settings) {
+			$lookup_service = BitcoinExchangeRateService::ForServiceName($service_name);
+			if ($btc_amount = $lookup_service->lookup_rate($currency_code)) {
+				return $btc_amount;
+			}
+		}
+
+		return 0;
+
+	}
+
+	function lookup_rate($currency_code) {
+
+		if (!$url = $this->_config['url']) {
+			return 0;
+		}
+
+		if (!$response = BitcoinWebServiceClient::Http_response( $url, '', array() )) {
+			return 0;
+		}
+
+		// TODO: We're getting the headers here for some reason.
+		// Stripping them out for now, but we should be able to get a body without headers in the first place somehow.
+		if (preg_match("/^.*?(\{.*\}).*?$/m", $response, $matches)) {
+			$response = $matches[1];
+		} else {
+			print "no match";
+			exit;
+		}
+
+		if (!$json = json_decode($response, true)) {
+			return 0;
+		}
+
+		// TODO: We should probably cache the responses at this point.
+		
+		if (isset($json[$currency_code]['24h'])) {
+			return $json[$currency_code]['24h'];
+		}
+
+		return 0;
+
 	}
 
 }
