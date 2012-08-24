@@ -6,7 +6,7 @@ create database opensim_btc;
 -- Where possible, we will keep many addresses for each avatar.
 create table opensim_btc.opensim_btc_addresses(
 	btc_address varchar(255) primary key not null, -- A Bitcoin address somebody can pay money to.
-	avatar_uuid varchar(255) not null -- The avatar name.
+	user_identifier varchar(255) not null -- The avatar uuid or email address - in practice using email address at present
 );
 
 -- Table for lists of transactions.

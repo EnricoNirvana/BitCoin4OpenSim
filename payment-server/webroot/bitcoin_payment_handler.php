@@ -170,7 +170,7 @@ function process_address_page($mysqli) {
 	foreach($addresses as $address) {
 		$bitcoin_address = new BitcoinAddress($mysqli);
 		$bitcoin_address->btc_address = $address;
-		$bitcoin_address->avatar_uuid = $email;
+		$bitcoin_address->user_identifier = $email;
 		// This may fail if it's a duplicate. 
 		if ($bitcoin_address->insert()) {
 			$addresses_created[] = $address;
@@ -289,7 +289,7 @@ class BitcoinAddress {
 
 	var $_mysqli = null; // A mysqli database mysqliection
 	var $btc_address; // A Bitcoin address somebody can pay money to.
-	var $avatar_uuid; // The avatar name.
+	var $user_identifier; // The avatar name.
 
 	function BitcoinAddress($mysqli) {
 
@@ -303,13 +303,13 @@ class BitcoinAddress {
 			return false;
 		}
 
-		if (!$this->btc_address || !$this->avatar_uuid) {
+		if (!$this->btc_address || !$this->user_identifier) {
 			return false;
 		}
 
 		$query  = 'INSERT INTO opensim_btc_addresses(';
 		$query .= 'btc_address, ';
-		$query .= 'avatar_uuid ';
+		$query .= 'user_identifier ';
 		$query .= ') values(?,?)';
 
 		if (!$stmt = $mysqli->prepare($query))  {
@@ -319,7 +319,7 @@ class BitcoinAddress {
 		$stmt->bind_param( 
 			'ss', 
 			$this->btc_address,
-			$this->avatar_uuid
+			$this->user_identifier
 		);
 
 		if (!$stmt->execute()) {
@@ -343,7 +343,7 @@ class BitcoinAddress {
 		}
 
 		// Find an address for the avatar that isn't currently in use.
-		$query = 'select a.btc_address from opensim_btc_addresses a left outer join opensim_btc_transactions t on a.btc_address=t.btc_address where a.avatar_uuid=? AND t.confirmation_sent_ts > 0 OR t.id IS NULL limit 1';
+		$query = 'select a.btc_address from opensim_btc_addresses a left outer join opensim_btc_transactions t on a.btc_address=t.btc_address where a.user_identifier=? AND t.confirmation_sent_ts > 0 OR t.id IS NULL limit 1';
 
 		if (!$stmt = $mysqli->prepare($query))  {
 			return false;	
@@ -374,7 +374,7 @@ class BitcoinAddress {
 
 		$address = new BitcoinAddress($mysqli);
 		$address->btc_address = $btc_address;
-		$address->avatar_uuid = $av;
+		$address->user_identifier = $av;
 
 		if ($address->insert()) {
 			return $address->btc_address;
