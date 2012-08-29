@@ -23,16 +23,22 @@ IT IS HIGHLY UNTESTED, EXPERIMENTAL AND COMPLETELY UNWARRANTIED.
 IF IT BREAKS, YOU GET TO KEEP BOTH PIECES, BUT MAY HAVE LOST YOUR WALLET.
 ----
 
-This module uses PayPal as the backend, this means all transactions are real 
-hard transactions in USD. By default, this module sets the rate at 
-OS$1 = 1 US Cent, eg - OS$300 = US$3.00. Payments are confirmed by the buyer 
-through PayPal's standard purchasing interface; the simulator is then notified 
-via PayPal IPN of the payment - and will process the original request.
+This module uses PayPal or Bitcoin as the backend, rather than storing money on the server.
+
+This means all transactions are real hard transactions. 
+
+By default, this module sets the rate at OS$1 = 1 US Cent, eg - OS$300 = US$3.00. 
+
+PayPal payments are confirmed by the buyer through PayPal's standard purchasing interface; 
+the simulator is then notified via PayPal IPN of the payment - and will process the original request.
+
+Bitcoin payments are confirmed by an external monitoring service. We are currently using bitcoinmonitor.net.
 
 
 Configuring this module:
 Add the following sections to your OpenSim.ini file
 
+TODO: Add the Bitcoin stuf.
 
 [PayPal]
     Enabled = true

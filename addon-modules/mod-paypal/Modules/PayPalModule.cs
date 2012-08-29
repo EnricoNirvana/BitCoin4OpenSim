@@ -48,8 +48,11 @@ using OpenSim.Server.Base;
 using OpenSim.Region.CoreModules.World.Land;
 using GridRegion = OpenSim.Services.Interfaces.GridRegion;
 using Nwc.XmlRpc;
+using System.Text.RegularExpressions;
 
 using Mono.Addins;
+
+
 
 /*
 [assembly: Addin("PayPal", "0.1")]
@@ -65,9 +68,10 @@ namespace PayPal
         private string m_ppprotocol = "https";
         private string m_pprequesturi = "/cgi-bin/webscr";
 
-        private string m_btcurl = "";
-        private string m_btcprotocol = "https";
-        private string m_btcrequesturi = "/payment-server/bitcoin_payment_handler.php";
+        // External URL - useful for me developing behind a firewall, 
+        // probably not useful for anyone else...
+        private string m_externalBaseURL = "";
+        private string m_connectionString;
 
         // Change to www.sandbox.paypal.com for testing.
         private bool m_active;
@@ -78,6 +82,9 @@ namespace PayPal
 
         private static readonly ILog m_log = LogManager.GetLogger (MethodBase.GetCurrentMethod ().DeclaringType);
         private readonly Dictionary<UUID, string> m_usersemail = new Dictionary<UUID, string> ();
+
+        // Database details and web service info that needs to be passed to Bitcoin objects
+        private readonly Dictionary<string, string> m_btcconfig = new Dictionary<string, string> ();
 
 	// We'll keep our own session key for each user we encounter.
 	// This will be used in the URL when we show people the Bitcoin transaction pages...
@@ -122,6 +129,8 @@ namespace PayPal
         private int PriceUpload = 0;
         private int TeleportMinPrice = 0;
         private float TeleportPriceExponent = 0f;
+
+        private bool m_directToBitcoin = false;
 
         #region Currency - PayPal
 
@@ -216,10 +225,16 @@ namespace PayPal
             
             string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
             
-	    initializeBitcoinTransaction(txn, baseUrl);
+            // If we're definitely going to use Bitcoin for this transaction, go ahead and initialize it and show the page page.
+            // Otherwise, show an intermediate page to choose the payment type, and only initialize for Bitcoin if they choose it.
+            string pageName = "pp";
+            if (m_directToBitcoin) {
+                InitializeBitcoinTransaction(txn, baseUrl);
+                pageName = "btcgo";
+            } 
 
             user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm payment?", "http://" +
-                              baseUrl + "/pp/?txn=" + txn.TxID);
+                              baseUrl + "/"+pageName+"/?txn=" + txn.TxID);
         }
 
         void TransferSuccess (PayPalTransaction transaction)
@@ -313,6 +328,302 @@ namespace PayPal
             return amount / (decimal)100;
         }
 
+
+        public Hashtable HandleBitcoinRegistrationRequest(Hashtable request_hash) 
+        //public Hashtable HandleBitcoinRegistrationRequest(Dictionary<string, object> getvals, Dictionary<string,object> postvals) 
+        {
+
+            Dictionary<string, object> postvals = ServerUtils.ParseQueryString ((string)request_hash["body"]);
+            Dictionary<string, object> getvals = new Dictionary<string, object>();
+
+            //string base_url = "http://beech/TODO";
+
+            string base_url = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
+            bool has_errors = false;
+            
+            string btc_session_id = "";
+            if (postvals.ContainsKey("btc_session_id")) {
+                btc_session_id = (string)postvals["btc_session_id"];
+            } else if (getvals.ContainsKey("btc_session_id")) {
+                btc_session_id = (string)getvals["btc_session_id"];
+            }
+
+            if (btc_session_id == "") {
+                has_errors = true;
+            }
+
+            // TODO: Get this from the session
+            string user_identifier = "test@edochan.com";
+            bool is_submit = false;
+
+            List<string> addresses_created = new List<string>();
+            List<string> addresses_failed = new List<string>();
+
+            if (postvals.ContainsKey("addresses")) {
+
+                is_submit = true;
+                string address_text = (string)postvals["addresses"];
+
+                string[] addresses = Regex.Split(address_text, "/\n/"); 
+
+                for (int i=0; i<addresses.Length; i++) {
+                    BitcoinAddress btc_addr = new BitcoinAddress(m_connectionString, m_btcconfig);
+                    if (btc_addr.Create(user_identifier, addresses[i])) {
+                        addresses_created.Add(addresses[i]);
+                    } else {
+                        addresses_failed.Add(addresses[i]);
+                    }
+                }
+
+            }
+
+            int count_all_addresses = 0; //TODO
+            int count_usable_addresses = 0; //TODO
+
+            Dictionary<string, string> replacements = new Dictionary<string, string> ();
+            //replacements.Add ("{BTC_SESSION_ID}",  HttpUtility.HtmlEncode(btc_session_id));
+            //TODO put HttpUtility back
+            replacements.Add ("{BTC_SESSION_ID}", btc_session_id);
+            if (is_submit) {
+                replacements.Add ("{BTC_DISABLE_COMPLETE_START}",  "<!--");
+                replacements.Add ("{BTC_DISABLE_COMPLETE_END}",  "-->");
+                replacements.Add ("{BTC_DISABLE_INCOMPLETE_START}",  "");
+                replacements.Add ("{BTC_DISABLE_INCOMPLETE_END}",  "");
+            } else {
+                replacements.Add ("{BTC_DISABLE_INCOMPLETE_START}",  "<!--");
+                replacements.Add ("{BTC_DISABLE_INCOMPLETE_END}",  "-->");
+                replacements.Add ("{BTC_DISABLE_COMPLETE_START}",  "");
+                replacements.Add ("{BTC_DISABLE_COMPLETE_END}",  "");
+            }
+            replacements.Add ("{BTC_COUNT_NEW_ADDRESSES}", addresses_created.Count.ToString());
+            replacements.Add ("{BTC_COUNT_ALL_ADDRESSES}",  count_all_addresses.ToString());
+            replacements.Add ("{BTC_COUNT_USABLE_ADDRESSES}", count_usable_addresses.ToString());
+
+            string template;
+
+            try {
+                template = File.ReadAllText ("bitcoin-register-template.htm");
+            } catch (IOException) {
+                template = "Error: bitcoin-register-template.htm does not exist.";
+                //m_log.Error ("[PayPal] Unable to load template file.");
+                Console.WriteLine("Could not load template file");
+                has_errors = true;
+            }
+
+            int response_code = has_errors ? 400 : 200;
+
+            foreach (KeyValuePair<string, string> pair in replacements) {
+                template = template.Replace (pair.Key, pair.Value);
+            }
+
+            Hashtable reply = new Hashtable ();
+
+            reply["int_response_code"] = 200;
+            // 200 OK
+            reply["str_response_string"] = template;
+            reply["content_type"] = "text/html";
+
+            return reply;
+
+
+
+            // TODO: Handle odd formats
+            /*
+            $giveawaystr = '"Label","Address"';
+                if (preg_match('/'.preg_quote($giveawaystr).'/', $addresstext)) {
+                    $format = 'csv';
+                }
+
+                $lines = explode("\n", $addresstext);
+                $addresses = array();
+                foreach($lines as $line) {
+                    $line = trim($line);
+                    if ($format == 'csv') {
+                        if (preg_match('/^.*?,\"(.*?)\"$/', $line, $matches)) {
+                            if ($matches[1] == 'Address') {
+                                continue;
+                            }
+                            $addresses[] = $matches[1];
+                        }
+                    } else {
+                        $addresses[] = $line;
+                    }
+                }
+            */
+
+        }
+
+        public Hashtable HandleBitcoinConfirmationPing(Hashtable request_hash) 
+        {
+
+            //string base_url = "http://beech/TODO";
+            string base_url = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
+            /*
+            TODO: Recreate the ability to handle multiple services.
+            if (!get_params.ContainsKey("service")) {
+                //print_simple_and_exit("Error: Service name not set.");
+                return false;
+            }
+            */
+
+            Hashtable error_response = new Hashtable();
+            error_response.Add("int_response_code", 400);
+
+            //Dictionary<string, object> postvals = ServerUtils.ParseQueryString ((string)request["body"]);
+            string post_data = (string)request_hash["body"];
+
+            BitcoinNotificationService service = new BitcoinNotificationService(m_btcconfig, base_url);
+
+            if (!service.ParseRequestBody(post_data)) {
+                Console.WriteLine("Could not parse post params");
+                return error_response;
+            }
+
+            if (!service.IsValid()) {
+                return error_response;
+            }
+
+            string address = service.BtcAddress();
+            int num_confirmations_received = service.NumConfirmationsReceived();
+
+            BitcoinTransaction btc_trans = new BitcoinTransaction(m_connectionString, m_btcconfig, base_url);
+            
+            if (!btc_trans.PopulateByBtcAddress(address)) {
+                Console.WriteLine("Could not find btc_trans");
+                return error_response;
+            }
+
+            // Always mark the latest number of confirmations, assuming it's more than we had last time.
+            if (!btc_trans.MarkConfirmed(num_confirmations_received)) {
+                Console.WriteLine("Could not mark confirmed in database"); 
+                //print_simple_and_exit("Could not mark btc_trans confirmed despite receiving ".htmlentities($num_confirmations_received)." confirmations.");
+                return error_response;
+            }
+
+            // If it's less than we need, there should be nothing more to do.
+            //if (num_confirmations_received < btc_trans.num_confirmations_required) 
+            if (!btc_trans.IsEnoughConfirmations(num_confirmations_received)) {
+                Console.WriteLine(Convert.ToInt32(num_confirmations_received)+" - confirmations not enough yet"); 
+                return error_response;
+                //print_simple_and_exit("Not enough confirmations, ignoring.", 200);
+            }
+
+            // If we've already notified the client about this btc_trans, no need to do anything else.
+            if (btc_trans.IsConfirmationSent()) {
+                //print_simple_and_exit("Already confirmed, nothing more to do.", 200);
+            }
+
+            UUID txnID = new UUID (btc_trans.GetTransactionID());
+            if (!m_transactionsInProgress.ContainsKey (txnID)) {
+                Hashtable ereply = new Hashtable ();
+                
+                ereply["int_response_code"] = 404;
+                // 200 OK
+                ereply["str_response_string"] = "Invalid Transaction";
+                ereply["content_type"] = "text/html";
+                
+                return ereply;
+            }
+            
+            PayPalTransaction txn = m_transactionsInProgress[txnID];
+
+            if (!btc_trans.MarkNotified()) {
+                //print_simple_and_exit("Notified sim, but unable to record the fact that we did.");
+                Console.WriteLine("Could not mark notified"); 
+                return error_response;
+            }
+
+            Util.FireAndForget (delegate { TransferSuccess (txn); });
+
+            Hashtable ok_response = new Hashtable();
+            ok_response.Add("int_response_code", 200);
+            ok_response.Add("str_response_string", "OK, thanks for letting us know.");
+            ok_response.Add("content_type", "text/html");
+
+            return ok_response;
+
+        }
+
+        public Hashtable BitcoinInitializePaymentPage(Hashtable request) 
+        {
+
+            Dictionary<string, object> postvals = ServerUtils.ParseQueryString ((string)request["body"]);
+
+            UUID txnID = new UUID ((string)postvals["txn"]);
+             
+            if (!m_transactionsInProgress.ContainsKey (txnID)) {
+                Hashtable ereply = new Hashtable ();
+                
+                ereply["int_response_code"] = 404;
+                // 200 OK
+                ereply["str_response_string"] = "Invalid Transaction";
+                ereply["content_type"] = "text/html";
+                
+                return ereply;
+            }
+            
+            PayPalTransaction txn = m_transactionsInProgress[txnID];
+
+            string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
+
+            bool has_errors = false;
+
+            BitcoinTransaction btc_trans = InitializeBitcoinTransaction(txn, baseUrl);
+ 
+            // TODO: Check initialize worked OK
+
+            int count_all_addresses = 10;
+            int count_usable_addresses = 5;
+
+            Dictionary<string, string> replacements = new Dictionary<string, string> ();
+            //replacements.Add ("{BTC_SESSION_ID}",  HttpUtility.HtmlEncode(btc_session_id));
+            //TODO put HttpUtility back
+            replacements.Add ("{BTC_SESSION_ID}", GetSessionKey( txn.From ).ToString());
+            bool is_submit = true; // TODO
+            if (is_submit) {
+                replacements.Add ("{BTC_DISABLE_COMPLETE_START}",  "<!--");
+                replacements.Add ("{BTC_DISABLE_COMPLETE_END}",  "-->");
+                replacements.Add ("{BTC_DISABLE_INCOMPLETE_START}",  "");
+                replacements.Add ("{BTC_DISABLE_INCOMPLETE_END}",  "");
+            } else {
+                replacements.Add ("{BTC_DISABLE_INCOMPLETE_START}",  "<!--");
+                replacements.Add ("{BTC_DISABLE_INCOMPLETE_END}",  "-->");
+                replacements.Add ("{BTC_DISABLE_COMPLETE_START}",  "");
+                replacements.Add ("{BTC_DISABLE_COMPLETE_END}",  "");
+            }
+            replacements.Add ("{BTC_AMOUNT}", btc_trans.GetBTCAmount().ToString());
+            replacements.Add ("{BTC_ADDRESS}", btc_trans.GetBTCAddress().ToString());
+            replacements.Add ("{BTC_COUNT_ALL_ADDRESSES}",  count_all_addresses.ToString());
+            replacements.Add ("{BTC_COUNT_USABLE_ADDRESSES}", count_usable_addresses.ToString());
+
+            string template;
+
+            try {
+                template = File.ReadAllText ("bitcoin-pay-template.htm");
+            } catch (IOException) {
+                template = "Error: bitcoin-register-template.htm does not exist.";
+                //m_log.Error ("[PayPal] Unable to load template file.");
+                Console.WriteLine("Could not load template file");
+                has_errors = true;
+            }
+
+            int response_code = has_errors ? 400 : 200;
+
+            foreach (KeyValuePair<string, string> pair in replacements) {
+                template = template.Replace (pair.Key, pair.Value);
+            }
+
+            Hashtable reply = new Hashtable ();
+
+            reply["int_response_code"] = 200;
+            // 200 OK
+            reply["str_response_string"] = template;
+            reply["content_type"] = "text/html";
+
+            return reply;
+
+        }
+
         public Hashtable UserPage (Hashtable request)
         {
             UUID txnID = new UUID ((string)request["txn"]);
@@ -322,7 +633,7 @@ namespace PayPal
                 
                 ereply["int_response_code"] = 404;
                 // 200 OK
-                ereply["str_response_string"] = "<h1>Invalid Transaction</h1>";
+                ereply["str_response_string"] = "Invalid Transaction";
                 ereply["content_type"] = "text/html";
                 
                 return ereply;
@@ -350,18 +661,12 @@ namespace PayPal
             // The URL for Bitcoin will be modelled on the PayPal one.
             // This will allow us use a common Bitcoin page handler whether or not we've hacked this.
             // It'll just throw away arguments it doesn't need.
-            string btcurl = m_btcprotocol+"://" + m_btcurl + m_btcrequesturi+"?cmd=_xclick";
+            //string btcurl = m_btcprotocol+"://" + m_btcurl + m_btcrequesturi+"?cmd=_xclick";
+            string btcurl = "/btcgo/";
 
             string btcfields = ""
-		+ "<input type=\"hidden\" name=\"business\" value=\""+HttpUtility.HtmlEncode (txn.SellersEmail)+"\" />"
-		+ "<input type=\"hidden\" name=\"item_name\" value=\""+HttpUtility.HtmlEncode (txn.Description)+"\" />"
-		+ "<input type=\"hidden\" name=\"item_number\" value=\""+HttpUtility.HtmlEncode (txn.TxID.ToString ())+"\" />"
-		+ "<input type=\"hidden\" name=\"amount\" value=\""+HttpUtility.HtmlEncode (String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount)))+"\" />"
-		+ "<input type=\"hidden\" name=\"notify_url\" value=\""+HttpUtility.HtmlEncode ("http://" + baseUrl + "/btcipn/")+"\" />"
-		+ "<input type=\"hidden\" name=\"currency_code\" value=\""+HttpUtility.HtmlEncode ("USD")+"\" />"
-		+ "<input type=\"hidden\" name=\"sim_base_url\" value=\""+HttpUtility.HtmlEncode ("http://" + baseUrl)+"\" />"
-		+ "<input type=\"hidden\" name=\"btc_session_id\" value=\""+HttpUtility.HtmlEncode ( GetSessionKey( txn.From ).ToString() )+"\" />";
-		
+            + "<input type=\"hidden\" name=\"txn\" value=\""+HttpUtility.HtmlEncode (txn.TxID.ToString ())+"\" />"
+            + "<input type=\"hidden\" name=\"btc_session_id\" value=\""+HttpUtility.HtmlEncode ( GetSessionKey( txn.From ).ToString() )+"\" />";
             
             Dictionary<string, string> replacements = new Dictionary<string, string> ();
             replacements.Add ("{ITEM}",  HttpUtility.HtmlEncode(txn.Description));
@@ -395,6 +700,7 @@ namespace PayPal
             reply["content_type"] = "text/html";
             
             return reply;
+
         }
 
         static internal void debugStringDict (Dictionary<string, object> strs)
@@ -404,61 +710,61 @@ namespace PayPal
             }
         }
 
-	public Hashtable BuyerInfo (Hashtable request) 
-	{
-            Dictionary<string, object> postvals = ServerUtils.ParseQueryString ((string)request["body"]);
+        public Hashtable BuyerInfo (Hashtable request) 
+        {
+                Dictionary<string, object> postvals = ServerUtils.ParseQueryString ((string)request["body"]);
 
-	    Hashtable reply = new Hashtable ();
-            reply["content_type"] = "text/html";
+            Hashtable reply = new Hashtable ();
+                reply["content_type"] = "text/html";
 
-	    if (!postvals.ContainsKey("btc_session_id")) {
-               reply["int_response_code"] = 403;
-               reply["str_response_string"] = "Forbidden due to missing session ID";
-	       return reply;
-	    }
-
- 	    UUID buyerID;
-	    UUID sessKey = new UUID ((string)postvals["btc_session_id"]);
-
-	    if (m_sessionkeyuser.ContainsKey(sessKey)) {
-	        buyerID = m_sessionkeyuser[sessKey];
-	    } else {
-               reply["int_response_code"] = 404;
-               reply["str_response_string"] = "Buyer not found - maybe session has expired?";
-	       return reply;
-	    }
-
-            string email;
-	    if (!GetEmail (m_scenes[0].RegionInfo.ScopeID, buyerID, out email)) {
-               reply["int_response_code"] = 404;
-               reply["str_response_string"] = "Buyer not found or lacks email address";
-	       return reply;
+            if (!postvals.ContainsKey("btc_session_id")) {
+                   reply["int_response_code"] = 403;
+                   reply["str_response_string"] = "Forbidden due to missing session ID";
+               return reply;
             }
 
-	    /*
-	    IUserAccountService userAccountService = m_scenes[0].UserAccountService;
-	    UserAccount ua;
-	    
-	    ua = userAccountService.GetUserAccount (buyerID, "", "");
-            if (ua == null) {
-               reply["int_response_code"] = 404;
-               reply["str_response_string"] = "Buyer not found";
-	       return reply;
-	    }
+            UUID buyerID;
+            UUID sessKey = new UUID ((string)postvals["btc_session_id"]);
 
-            if ( string.IsNullOrEmpty (ua.Email) ) {
-               reply["int_response_code"] = 404;
-               reply["str_response_string"] = "Buyer or lacks email address";
-	    }
+            if (m_sessionkeyuser.ContainsKey(sessKey)) {
+                buyerID = m_sessionkeyuser[sessKey];
+            } else {
+                   reply["int_response_code"] = 404;
+                   reply["str_response_string"] = "Buyer not found - maybe session has expired?";
+               return reply;
+            }
 
-	    string buyer_email = ua.Email;
-            */	
+                string email;
+            if (!GetEmail (m_scenes[0].RegionInfo.ScopeID, buyerID, out email)) {
+                   reply["int_response_code"] = 404;
+                   reply["str_response_string"] = "Buyer not found or lacks email address";
+               return reply;
+                }
+
+            /*
+            IUserAccountService userAccountService = m_scenes[0].UserAccountService;
+            UserAccount ua;
+            
+            ua = userAccountService.GetUserAccount (buyerID, "", "");
+                if (ua == null) {
+                   reply["int_response_code"] = 404;
+                   reply["str_response_string"] = "Buyer not found";
+               return reply;
+            }
+
+                if ( string.IsNullOrEmpty (ua.Email) ) {
+                   reply["int_response_code"] = 404;
+                   reply["str_response_string"] = "Buyer or lacks email address";
+            }
+
+            string buyer_email = ua.Email;
+                */	
 
             reply["int_response_code"] = 200;
             reply["str_response_string"] = email;
-	    return reply;
+            return reply;
 
-	}
+        }
 
         public Hashtable IPN (Hashtable request)
         {
@@ -613,10 +919,6 @@ namespace PayPal
             m_ppprotocol = config.GetString ("PayPalProtocol", m_ppprotocol);
             m_pprequesturi = config.GetString ("PayPalRequestURI", m_pprequesturi);
 
-            m_btcurl = config.GetString ("PayPalBTCURL", m_btcurl);
-            m_btcprotocol = config.GetString ("PayPalBTCProtocol", m_btcprotocol);
-            m_btcrequesturi = config.GetString ("PayPalBTCRequestURI", m_btcrequesturi);
-
             m_allowGridEmails = config.GetBoolean ("AllowGridEmails", false);
             m_allowGroups = config.GetBoolean ("AllowGroups", false);
             
@@ -652,6 +954,35 @@ namespace PayPal
                 PriceParcelRent = economyConfig.GetInt("PriceParcelRent", 1);
                 PriceGroupCreate = economyConfig.GetInt("PriceGroupCreate", -1);
             }
+
+            // TODO: Move to config file
+
+            m_btcconfig.Add("bitcoin_db_host", config.GetString ("BitcoinDBHost", "localhost"));
+            m_btcconfig.Add("bitcoin_db_name", config.GetString ("BitcoinDBName", "opensim_btc"));
+            m_btcconfig.Add("bitcoin_db_user", config.GetString ("BitcoinDBUser", "opensim_btc_user"));
+            m_btcconfig.Add("bitcoin_db_password", config.GetString ("BitcoinDBPassword", ""));
+
+            m_btcconfig.Add("bitcoin_external_url", config.GetString ("BitcoinServerExternalURL", ""));
+
+            m_btcconfig.Add("bitcoin_address_for_email_payer_name", config.GetString ("BitcoinEmailServicePayerName", "OpenSim Bitcoin Processor"));
+            m_btcconfig.Add("bitcoin_address_for_email_message_text", config.GetString ("BitcoinEmailServiceMessageText", "To make payments go directly to your own wallet in future instead of via email, please login and register some Bitcoin addresses."));
+
+            m_btcconfig.Add("bitcoin_address_for_email_service_1_url", config.GetString ("BitcoinEmailService1URL", "http://coinapult.com/payload/send/"));
+
+            m_btcconfig.Add("bitcoin_ping_service_1_agent_name", config.GetString ("BitcoinConfirmationService1AgentName", "opensim_bitcoin_dev_agent"));
+            m_btcconfig.Add("bitcoin_ping_service_1_base_url", config.GetString ("BitcoinConfirmationService1BaseURL", ""));
+
+            m_btcconfig.Add("bitcoin_ping_service_1_accesskey", config.GetString ("BitcoinConfirmationService1AccessKey", ""));
+            m_btcconfig.Add("bitcoin_ping_service_1_verificationkey", config.GetString ("BitcoinConfirmationService1VerificationKey", ""));
+
+            m_btcconfig.Add("bitcoin_exchange_rate_service_1_url", config.GetString ("BitcoinExchangeRateService1", "http://bitcoincharts.com/t/weighted_prices.json"));
+
+            m_connectionString = "" +
+                "Server="  + m_btcconfig["bitcoin_db_host"]+";" +
+                "Database="+ m_btcconfig["bitcoin_db_name"]+";" +
+                "User ID=" + m_btcconfig["bitcoin_db_user"]+";" +
+                "Password="+ m_btcconfig["bitcoin_db_password"]+";" +
+                "Pooling=false";
 
             m_log.Info ("[PayPal] Loaded.");
             
@@ -858,28 +1189,64 @@ namespace PayPal
             
             string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
 
-	    initializeBitcoinTransaction(txn, baseUrl);
+            // If we're definitely going to use Bitcoin for this transaction, go ahead and initialize it and show the page page.
+            // Otherwise, show an intermediate page to choose the payment type, and only initialize for Bitcoin if they choose it.
+            string pageName = "pp";
+            if (m_directToBitcoin) {
+                InitializeBitcoinTransaction(txn, baseUrl);
+                pageName = "btcgo";
+            } 
 
             user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm purchase?", "http://" +
-                              baseUrl + "/pp/?txn=" + txn.TxID);
+                              baseUrl + "/"+pageName+"/?txn=" + txn.TxID);
         }
 
-	private bool initializeBitcoinTransaction(PayPalTransaction txn, string baseUrl) {
+        //public bool InitializeBitcoinTransaction(Dictionary<string,string> transaction_params, string base_url) 
+        private BitcoinTransaction InitializeBitcoinTransaction(PayPalTransaction txn, string base_url) 
+        {
 
-	    // Hard-coding this for now - may end up building everything into mono, in which case it will go away.
-	    string bitcoin_server =  m_btcprotocol + "://" + m_btcurl + m_btcrequesturi + "?cmd=initialize_transaction"; 
+            // ED TODO: Put in params
 
-            string post_data = ""
-		+ "business="       +HttpUtility.HtmlEncode (txn.SellersEmail)
-		+ "&item_name="     +HttpUtility.HtmlEncode (txn.Description)
-		+ "&item_number="   +HttpUtility.HtmlEncode (txn.TxID.ToString ())
-		+ "&amount="        +HttpUtility.HtmlEncode (String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount)))
-		+ "&notify_url="    +HttpUtility.HtmlEncode ("http://" + baseUrl + "/btcipn/")
-		+ "&currency_code=" +HttpUtility.HtmlEncode ("USD")
-		+ "&sim_base_url="  +HttpUtility.HtmlEncode ("http://" + baseUrl)
-		+ "&btc_session_id="+HttpUtility.HtmlEncode ( GetSessionKey( txn.From ).ToString() )
-		+ "";
- 
+
+            Dictionary<string, string> transaction_params = new Dictionary<string, string>();
+            //transaction_params.Add("payee", txn.SellersEmail);
+            transaction_params.Add("business", txn.SellersEmail);
+            transaction_params.Add("item_name", txn.Description);
+            transaction_params.Add("item_number", txn.TxID.ToString());
+            transaction_params.Add("amount", txn.Amount.ToString());
+            transaction_params.Add("currency_code", "USD");
+            transaction_params.Add("notify_url", "");
+
+            // Optionally, use an external URL that's accessible from outside NAT.
+            if (m_externalBaseURL != "") {
+                base_url = m_externalBaseURL;
+            }
+
+            BitcoinTransaction btc_trans = new BitcoinTransaction(m_connectionString, m_btcconfig, base_url);
+            btc_trans.Initialize(transaction_params);
+
+            return btc_trans;
+
+        }
+
+
+        /*
+        private bool initializeBitcoinTransaction(PayPalTransaction txn, string baseUrl) {
+
+            // Hard-coding this for now - may end up building everything into mono, in which case it will go away.
+            string bitcoin_server =  m_btcprotocol + "://" + m_btcurl + m_btcrequesturi + "?cmd=initialize_transaction"; 
+
+                string post_data = ""
+            + "business="       +HttpUtility.HtmlEncode (txn.SellersEmail)
+            + "&item_name="     +HttpUtility.HtmlEncode (txn.Description)
+            + "&item_number="   +HttpUtility.HtmlEncode (txn.TxID.ToString ())
+            + "&amount="        +HttpUtility.HtmlEncode (String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount)))
+            + "&notify_url="    +HttpUtility.HtmlEncode ("http://" + baseUrl + "/btcipn/")
+            + "&currency_code=" +HttpUtility.HtmlEncode ("USD")
+            + "&sim_base_url="  +HttpUtility.HtmlEncode ("http://" + baseUrl)
+            + "&btc_session_id="+HttpUtility.HtmlEncode ( GetSessionKey( txn.From ).ToString() )
+            + "";
+     
             HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create (bitcoin_server);
             httpWebRequest.Method = "POST";
             
@@ -903,7 +1270,8 @@ namespace PayPal
 
 	    return true;
 
-	}
+            }
+        */
 
         public void requestPayPrice (IClientAPI client, UUID objectID)
         {
@@ -1057,10 +1425,17 @@ namespace PayPal
             
             string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
 
-	    initializeBitcoinTransaction(txn, baseUrl);
+            // If we're definitely going to use Bitcoin for this transaction, go ahead and initialize it and show the page page.
+            // Otherwise, show an intermediate page to choose the payment type, and only initialize for Bitcoin if they choose it.
+            string pageName = "pp";
+            if (m_directToBitcoin) {
+                InitializeBitcoinTransaction(txn, baseUrl);
+                pageName = "btcgo";
+            } 
             
             user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm payment?", "http://" +
-                              baseUrl + "/pp/?txn=" + txn.TxID);
+                              baseUrl + "/"+pageName+"/?txn=" + txn.TxID);
+
         }
 
         public XmlRpcResponse preflightBuyLandPrep_func (XmlRpcRequest request, IPEndPoint remoteClient)
@@ -1109,28 +1484,28 @@ namespace PayPal
             return ret;
         }
 
-	// Return a money-server-specific session key for the user
-	// ...creating it and adding it to m_usersessionkey in the process if it doesn't already exist.
-	// TODO: Figure out if this dictionary is supposed to be locked or something.
-	private UUID GetSessionKey(UUID userkey)
-	{
+        // Return a money-server-specific session key for the user
+        // ...creating it and adding it to m_usersessionkey in the process if it doesn't already exist.
+        // TODO: Figure out if this dictionary is supposed to be locked or something.
+        private UUID GetSessionKey(UUID userkey)
+        {
             if (m_usersessionkey.ContainsKey(userkey)) {
                 return m_usersessionkey[userkey];
-	    }
+            }
 
             byte[] randomBuf = new byte[16];
             RNGCryptoServiceProvider random = new RNGCryptoServiceProvider();
             random.GetBytes(randomBuf);
             Guid sID = new Guid(randomBuf);
 
-	    UUID userUUID = new UUID(sID);
+            UUID userUUID = new UUID(sID);
 
-	    m_usersessionkey.Add(userkey, userUUID);
-	    m_sessionkeyuser.Add(userUUID, userkey);
+            m_usersessionkey.Add(userkey, userUUID);
+            m_sessionkeyuser.Add(userUUID, userkey);
 
             return userUUID;
 
-	}
+        }
 
         private bool GetEmail (UUID scope, UUID key, out string email)
         {
@@ -1316,7 +1691,9 @@ namespace PayPal
             MainServer.Instance.AddHTTPHandler ("/ppipn/", IPN);
 
 	    // For now Bitcoin uses the same IPN as PayPal. But we'll give it a different URL to make it clear what's going on.
-            MainServer.Instance.AddHTTPHandler ("/btcipn/", IPN); 
+            MainServer.Instance.AddHTTPHandler ("/register_addresses/", HandleBitcoinRegistrationRequest); 
+            MainServer.Instance.AddHTTPHandler ("/btcgo/", BitcoinInitializePaymentPage); 
+            MainServer.Instance.AddHTTPHandler ("/btcping/", HandleBitcoinConfirmationPing); 
 
 	    // Allow the Bitcoin server to ask us for the email and UUID of the buyer.
             MainServer.Instance.AddHTTPHandler ("/btcbuyerinfo/", BuyerInfo); 
