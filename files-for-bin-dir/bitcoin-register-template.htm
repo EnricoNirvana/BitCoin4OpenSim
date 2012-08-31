@@ -1,7 +1,7 @@
 <!-- Sample Layout File for Mod-PayPal -->
 <html>
 	<head>
-		<title>Transaction Uses PayPal or Bitcoin</title>
+		<title>Pay using Bitcoin</title>
 		<style>
 			body {
 				margin: 0px 0px 0px 0px;
@@ -101,26 +101,32 @@
 		</style>
 	</head>
 	<div id="header">
-		<h1>Pay with PayPal or Bitcoin</h1>
-	</div>
-	<div id="warning">
-		<h2>Experimental Warning</h2>
-		<p style="margin-bottom: 0px; font-size: 0.8em">This is experimental. Please do not use in production.</p>
+		<h1>Register Bitcoin Addresses</h1>
 	</div>
 
 	<div id="content">
-		<p>Purchasing {ITEM} will cost {AMOUNT} {CURRENCYCODE}.</p>
-		<p>To proceed with this payment, please click the following link. The region will be notified when payment has completed to fill any applicable services.</p>
-		<p style="text-align: right; margin-bottom: 0px;"><a href="{BTCBILLINGLINK}">Pay with Bitcoin</a></p>
+		{BTC_DISABLE_COMPLETE_START}
+                <p>We currently have {BTC_COUNT_ALL_ADDRESSES} addresses on file for you, of which {BTC_COUNT_USABLE_ADDRESSES} are currently available.</p>
+		{BTC_DISABLE_COMPLETE_END}
+
+		{BTC_DISABLE_INCOMPLETE_START}
+		<p><strong>Thank you, {BTC_COUNT_NEW_ADDRESSES} new addresses have been registered.</strong></p>
+                <p>We now have {BTC_COUNT_ALL_ADDRESSES} addresses on file for you, of which {BTC_COUNT_USABLE_ADDRESSES} are currently available.</p>
+		{BTC_DISABLE_INCOMPLETE_END}
+	</div>
+        
+	<div id="content">
+		<p>Enter some Bitcoin addresses below so that people can pay you.</p>
+		<p>One address will be used for each payment, but we will reuse addresses when each payment is complete.</p>
+		<p>If you run out, we will create an address for you and send you an email so that you can access it.</p>
+		<form method="POST" action="/register_addresses/">
+			<textarea style="width:370px; height:200px;" name="addresses">
+			</textarea>
+			<input type="hidden" name="btc_session_id" value="{BTC_SESSION_ID}" />
+			<input type="submit" name="submit" value="Register addresses" />
+		</form>
 	</div>
 
-	<div id="content">
-		<p>Purchasing {ITEM} will cost {AMOUNT} {CURRENCYCODE}.</p>
-		<p style="font-weight: bold;">This will be billed in {CURRENCYCODE} from your Credit Card or Bank Account via PayPal.</p>
-		<!-- <p>Billing of this purchase will be handled by PayPal, which allows you to purchase items online securely without revealing your credit card or bank information to the merchant.</p> -->
-		<p>To proceed with this payment, please click the following link. The region will be notified when payment has completed to fill any applicable services.</p>
-		<p style="text-align: right; margin-bottom: 0px;"><a href="{BILLINGLINK}">Pay with PayPal</a></p>
-	</div>
 	<div id="footer">
 		<p style="font-size: 0.7em;">This transaction uses <a href="http://github.com/edmundedgar/Mod-Bitcoin">Mod-Bitcoin</a>, a Module for <a href="http://www.opensimulator.org">OpenSimulator</a> which enables PayPal and Bitcoin currency support. Please note that the developers of this module cannot provide support and is not involved in any way with this purchase.</p>
 		<p style="margin-bottom: 0px; font-size: 0.7em;">For issues with this purchase, please contact the merchant directly or file a dispute with PayPal.</p>
