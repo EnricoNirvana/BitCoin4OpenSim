@@ -25,9 +25,9 @@
  */
 using System.Text.RegularExpressions;
 
-namespace PayPal
+namespace FreeMoney
 {
-    public static class PayPalHelpers
+    public static class FreeMoneyHelpers
     {
         /// <summary>
         /// method for determining is the user provided a valid email address

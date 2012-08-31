@@ -55,15 +55,16 @@ using Mono.Addins;
 
 
 /*
-[assembly: Addin("PayPal", "0.1")]
+[assembly: Addin("FreeMoney", "0.1")]
 [assembly: AddinDependency("OpenSim", "0.5")]
 */
 
-namespace PayPal
+namespace FreeMoney
 {
     [Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule")]
-    public class PayPalModule : ISharedRegionModule, IMoneyModule
+    public class FreeMoneyModule : ISharedRegionModule, IMoneyModule
     {
+        // Change to www.sandbox.paypal.com for testing.
         private string m_ppurl = "www.paypal.com";
         private string m_ppprotocol = "https";
         private string m_pprequesturi = "/cgi-bin/webscr";
@@ -73,9 +74,11 @@ namespace PayPal
         private string m_externalBaseURL = "";
         private string m_connectionString;
 
-        // Change to www.sandbox.paypal.com for testing.
         private bool m_active;
         private bool m_enabled;
+
+        private bool m_allowPayPal = false;
+        private bool m_allowBitcoin = false;
 
         private readonly object m_setupLock = new object ();
         private bool m_setup;
@@ -101,8 +104,8 @@ namespace PayPal
 
         private const int m_maxBalance = 100000;
 
-        private readonly Dictionary<UUID, PayPalTransaction> m_transactionsInProgress =
-            new Dictionary<UUID, PayPalTransaction> ();
+        private readonly Dictionary<UUID, FreeMoneyTransaction> m_transactionsInProgress =
+            new Dictionary<UUID, FreeMoneyTransaction> ();
 
         private bool m_allowGridEmails = false;
         private bool m_allowGroups = false;
@@ -132,7 +135,7 @@ namespace PayPal
 
         private bool m_directToBitcoin = false;
 
-        #region Currency - PayPal
+        #region Currency - FreeMoney
 
         /// <summary>
         /// 
@@ -165,17 +168,17 @@ namespace PayPal
             }
             
             if (scene == null || user == null) {
-                m_log.Warn ("[PayPal] Unable to find scene or user! Aborting transaction.");
+                m_log.Warn ("[FreeMoney] Unable to find scene or user! Aborting transaction.");
                 return;
             }
             
-            PayPalTransaction txn;
+            FreeMoneyTransaction txn;
             
             if (e.transactiontype == 5008) {
                 // Object was paid, find it.
                 SceneObjectPart sop = scene.GetSceneObjectPart (e.receiver);
                 if (sop == null) {
-                    m_log.Warn ("[PayPal] Unable to find SceneObjectPart that was paid. Aborting transaction.");
+                    m_log.Warn ("[FreeMoney] Unable to find SceneObjectPart that was paid. Aborting transaction.");
                     return;
                 }
                 
@@ -184,39 +187,39 @@ namespace PayPal
                 if (sop.OwnerID == sop.GroupID) {
                     if (m_allowGroups) {
                         if (!GetEmail (scene.RegionInfo.ScopeID, sop.OwnerID, out email)) {
-                            m_log.Warn ("[PayPal] Unknown email address of group " + sop.OwnerID);
+                            m_log.Warn ("[FreeMoney] Unknown email address of group " + sop.OwnerID);
                             return;
                         }
                     } else {
-                        m_log.Warn ("[PayPal] Payments to group owned objects is disabled.");
+                        m_log.Warn ("[FreeMoney] Payments to group owned objects is disabled.");
                         return;
                     }
                 } else {
                     if (!GetEmail (scene.RegionInfo.ScopeID, sop.OwnerID, out email)) {
-                        m_log.Warn ("[PayPal] Unknown email address of user " + sop.OwnerID);
+                        m_log.Warn ("[FreeMoney] Unknown email address of user " + sop.OwnerID);
                         return;
                     }
                 }
                 
-                m_log.Info ("[PayPal] Start: " + e.sender + " wants to pay object " + e.receiver + " owned by " +
+                m_log.Info ("[FreeMoney] Start: " + e.sender + " wants to pay object " + e.receiver + " owned by " +
                             sop.OwnerID + " with email " + email + " US$ cents " + e.amount);
                 
-                txn = new PayPalTransaction (e.sender, sop.OwnerID, email, e.amount, scene, e.receiver,
+                txn = new FreeMoneyTransaction (e.sender, sop.OwnerID, email, e.amount, scene, e.receiver,
                                              e.description + " T:" + e.transactiontype,
-                                             PayPalTransaction.InternalTransactionType.Payment);
+                                             FreeMoneyTransaction.InternalTransactionType.Payment);
             } else {
                 // Payment to a user.
                 string email;
                 if (!GetEmail (scene.RegionInfo.ScopeID, e.receiver, out email)) {
-                    m_log.Warn ("[PayPal] Unknown email address of user " + e.receiver);
+                    m_log.Warn ("[FreeMoney] Unknown email address of user " + e.receiver);
                     return;
                 }
                 
-                m_log.Info ("[PayPal] Start: " + e.sender + " wants to pay user " + e.receiver + " with email " +
+                m_log.Info ("[FreeMoney] Start: " + e.sender + " wants to pay user " + e.receiver + " with email " +
                             email + " US$ cents " + e.amount);
                 
-                txn = new PayPalTransaction (e.sender, e.receiver, email, e.amount, scene, e.description + " T:" +
-                                             e.transactiontype, PayPalTransaction.InternalTransactionType.Payment);
+                txn = new FreeMoneyTransaction (e.sender, e.receiver, email, e.amount, scene, e.description + " T:" +
+                                             e.transactiontype, FreeMoneyTransaction.InternalTransactionType.Payment);
             }
             
             // Add transaction to queue
@@ -233,16 +236,16 @@ namespace PayPal
                 pageName = "btcgo";
             } 
 
-            user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm payment?", "http://" +
+            user.SendLoadURL ("FreeMoney", txn.ObjectID, txn.To, false, "Confirm payment?", "http://" +
                               baseUrl + "/"+pageName+"/?txn=" + txn.TxID);
         }
 
-        void TransferSuccess (PayPalTransaction transaction)
+        void TransferSuccess (FreeMoneyTransaction transaction)
         {
-            if (transaction.InternalType == PayPalTransaction.InternalTransactionType.Payment) {
+            if (transaction.InternalType == FreeMoneyTransaction.InternalTransactionType.Payment) {
                 if (transaction.ObjectID == UUID.Zero) {
                     // User 2 User Transaction
-                    m_log.Info ("[PayPal] Success: " + transaction.From + " did pay user " +
+                    m_log.Info ("[FreeMoney] Success: " + transaction.From + " did pay user " +
                                 transaction.To + " US$ cents " + transaction.Amount);
                     
                     IUserAccountService userAccountService = m_scenes[0].UserAccountService;
@@ -259,31 +262,31 @@ namespace PayPal
                                         ua.LastName + " US$ cent " + transaction.Amount);
                 } else {
                     if (OnObjectPaid != null) {
-                        m_log.Info ("[PayPal] Success: " + transaction.From + " did pay object " +
+                        m_log.Info ("[FreeMoney] Success: " + transaction.From + " did pay object " +
                                     transaction.ObjectID + " owned by " + transaction.To +
                                     " US$ cents " + transaction.Amount);
                         
                         OnObjectPaid (transaction.ObjectID, transaction.From, transaction.Amount);
                     }
                 }
-            } else if (transaction.InternalType == PayPalTransaction.InternalTransactionType.Purchase) {
+            } else if (transaction.InternalType == FreeMoneyTransaction.InternalTransactionType.Purchase) {
                 if (transaction.ObjectID == UUID.Zero) {
-                    m_log.Error ("[PayPal] Unable to find Object bought! UUID Zero.");
+                    m_log.Error ("[FreeMoney] Unable to find Object bought! UUID Zero.");
                 } else {
                     Scene s = LocateSceneClientIn (transaction.From);
                     SceneObjectPart part = s.GetSceneObjectPart (transaction.ObjectID);
                     if (part == null) {
-                        m_log.Error ("[PayPal] Unable to find Object bought! UUID = " + transaction.ObjectID);
+                        m_log.Error ("[FreeMoney] Unable to find Object bought! UUID = " + transaction.ObjectID);
                         return;
                     }
                     
-                    m_log.Info ("[PayPal] Success: " + transaction.From + " did buy object " +
+                    m_log.Info ("[FreeMoney] Success: " + transaction.From + " did buy object " +
                                 transaction.ObjectID + " from " + transaction.To + " paying US$ cents " +
                                 transaction.Amount);
                     
                     IBuySellModule module = s.RequestModuleInterface<IBuySellModule> ();
                     if (module == null) {
-                        m_log.Error ("[PayPal] Missing BuySellModule! Transaction failed.");
+                        m_log.Error ("[FreeMoney] Missing BuySellModule! Transaction failed.");
                     } else {
                         ScenePresence sp = s.GetScenePresence(transaction.From);
                         if (sp != null)
@@ -292,7 +295,7 @@ namespace PayPal
                                           transaction.InternalPurchaseType, transaction.Amount);
                     }
                 }
-            } else if (transaction.InternalType == PayPalTransaction.InternalTransactionType.Land) {
+            } else if (transaction.InternalType == FreeMoneyTransaction.InternalTransactionType.Land) {
                 // User 2 Land Transaction
                 EventManager.LandBuyArgs e = transaction.E;
                 
@@ -304,17 +307,17 @@ namespace PayPal
                 ILandObject land = s.LandChannel.GetLandObject ((int)e.parcelLocalID);
                 
                 if (land == null) {
-                    m_log.Error ("[PayPal] Unable to find Land bought! UUID = " + e.parcelLocalID);
+                    m_log.Error ("[FreeMoney] Unable to find Land bought! UUID = " + e.parcelLocalID);
                     return;
                 }
                 
-                m_log.Info ("[PayPal] Success: " + e.agentId + " did buy land from " + e.parcelOwnerID +
+                m_log.Info ("[FreeMoney] Success: " + e.agentId + " did buy land from " + e.parcelOwnerID +
                             " paying US$ cents " + e.parcelPrice);
                 
                 land.UpdateLandSold (e.agentId, e.groupId, e.groupOwned, (uint)e.transactionID,
                                      e.parcelPrice, e.parcelArea);
             } else {
-                m_log.Error ("[PayPal] Unknown Internal Transaction Type.");
+                m_log.Error ("[FreeMoney] Unknown Internal Transaction Type.");
                 return;
             }
             // Cleanup.
@@ -405,7 +408,7 @@ namespace PayPal
                 template = File.ReadAllText ("bitcoin-register-template.htm");
             } catch (IOException) {
                 template = "Error: bitcoin-register-template.htm does not exist.";
-                //m_log.Error ("[PayPal] Unable to load template file.");
+                //m_log.Error ("[FreeMoney] Unable to load template file.");
                 Console.WriteLine("Could not load template file");
                 has_errors = true;
             }
@@ -525,7 +528,7 @@ namespace PayPal
                 return ereply;
             }
             
-            PayPalTransaction txn = m_transactionsInProgress[txnID];
+            FreeMoneyTransaction txn = m_transactionsInProgress[txnID];
 
             if (!btc_trans.MarkNotified()) {
                 //print_simple_and_exit("Notified sim, but unable to record the fact that we did.");
@@ -562,7 +565,7 @@ namespace PayPal
                 return ereply;
             }
             
-            PayPalTransaction txn = m_transactionsInProgress[txnID];
+            FreeMoneyTransaction txn = m_transactionsInProgress[txnID];
 
             string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
 
@@ -602,7 +605,7 @@ namespace PayPal
                 template = File.ReadAllText ("bitcoin-pay-template.htm");
             } catch (IOException) {
                 template = "Error: bitcoin-register-template.htm does not exist.";
-                //m_log.Error ("[PayPal] Unable to load template file.");
+                //m_log.Error ("[FreeMoney] Unable to load template file.");
                 Console.WriteLine("Could not load template file");
                 has_errors = true;
             }
@@ -639,11 +642,11 @@ namespace PayPal
                 return ereply;
             }
             
-            PayPalTransaction txn = m_transactionsInProgress[txnID];
+            FreeMoneyTransaction txn = m_transactionsInProgress[txnID];
             
             string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
             
-            // Ouch. (This is the PayPal Request URL)
+            // Ouch. (This is the FreeMoney Request URL)
             // TODO: Add in a return page
             // TODO: Add in a cancel page
             string url = m_ppprotocol+"://" + m_ppurl + m_pprequesturi+"?cmd=_xclick" + "&business=" +
@@ -658,7 +661,7 @@ namespace PayPal
                     HttpUtility.UrlEncode ("US") + "&bn=" + HttpUtility.UrlEncode ("PP-BuyNowBF") + "&charset=" +
                     HttpUtility.UrlEncode ("UTF-8") + "";
 
-            // The URL for Bitcoin will be modelled on the PayPal one.
+            // The URL for Bitcoin will be modelled on the FreeMoney one.
             // This will allow us use a common Bitcoin page handler whether or not we've hacked this.
             // It'll just throw away arguments it doesn't need.
             //string btcurl = m_btcprotocol+"://" + m_btcurl + m_btcrequesturi+"?cmd=_xclick";
@@ -682,10 +685,10 @@ namespace PayPal
             string template;
             
             try {
-                template = File.ReadAllText ("paypal-template.htm");
+                template = File.ReadAllText ("freemoney-template.htm");
             } catch (IOException) {
-                template = "Error: paypal-template.htm does not exist.";
-                m_log.Error ("[PayPal] Unable to load template file.");
+                template = "Error: freemoney-template.htm does not exist.";
+                m_log.Error ("[FreeMoney] Unable to load template file.");
             }
             
             foreach (KeyValuePair<string, string> pair in replacements) {
@@ -706,7 +709,7 @@ namespace PayPal
         static internal void debugStringDict (Dictionary<string, object> strs)
         {
             foreach (KeyValuePair<string, object> str in strs) {
-                m_log.Debug ("[PayPal] '" + str.Key + "' = '" + (string)str.Value + "'");
+                m_log.Debug ("[FreeMoney] '" + str.Key + "' = '" + (string)str.Value + "'");
             }
         }
 
@@ -777,7 +780,7 @@ namespace PayPal
             reply["content_type"] = "text/html";
             
             if (!m_active) {
-                m_log.Error ("[PayPal] Recieved IPN request, but module is disabled. Aborting.");
+                m_log.Error ("[FreeMoney] Recieved IPN request, but module is disabled. Aborting.");
                 reply["str_response_string"] = "IPN Not processed. Module is not enabled.";
                 return reply;
             }
@@ -805,13 +808,13 @@ namespace PayPal
             }
             
             if (httpWebResponse.StatusCode != HttpStatusCode.OK) {
-                m_log.Error ("[PayPal] IPN Status code != 200. Aborting.");
+                m_log.Error ("[FreeMoney] IPN Status code != 200. Aborting.");
                 debugStringDict (postvals);
                 return reply;
             }
             
             if (!response.Contains ("VERIFIED")) {
-                m_log.Error ("[PayPal] IPN was NOT verified. Aborting.");
+                m_log.Error ("[FreeMoney] IPN was NOT verified. Aborting.");
                 debugStringDict (postvals);
                 return reply;
             }
@@ -819,13 +822,13 @@ namespace PayPal
             // Handle IPN Components
             try {
                 if ((string)postvals["payment_status"] != "Completed") {
-                    m_log.Warn ("[PayPal] Transaction not confirmed. Aborting.");
+                    m_log.Warn ("[FreeMoney] Transaction not confirmed. Aborting.");
                     debugStringDict (postvals);
                     return reply;
                 }
                 
                 if (((string)postvals["mc_currency"]).ToUpper () != "USD") {
-                    m_log.Error ("[PayPal] Payment was made in an incorrect currency (" +
+                    m_log.Error ("[FreeMoney] Payment was made in an incorrect currency (" +
                                  postvals["mc_currency"] + "). Aborting.");
                     debugStringDict (postvals);
                     return reply;
@@ -833,11 +836,11 @@ namespace PayPal
                 
                 // Check we have a transaction with the listed ID.
                 UUID txnID = new UUID ((string)postvals["item_number"]);
-                PayPalTransaction txn;
+                FreeMoneyTransaction txn;
                 
                 lock (m_transactionsInProgress) {
                     if (!m_transactionsInProgress.ContainsKey (txnID)) {
-                        m_log.Error ("[PayPal] Recieved IPN request for Payment that is not in progress. Aborting.");
+                        m_log.Error ("[FreeMoney] Recieved IPN request for Payment that is not in progress. Aborting.");
                         debugStringDict (postvals);
                         return reply;
                     }
@@ -847,7 +850,7 @@ namespace PayPal
                 
                 // Check user paid correctly...
                 if (((string)postvals["business"]).ToLower () != txn.SellersEmail.ToLower ()) {
-                    m_log.Error ("[PayPal] Expected payment to " + txn.SellersEmail +
+                    m_log.Error ("[FreeMoney] Expected payment to " + txn.SellersEmail +
                                  " but receiver was " + (string)postvals["business"] + " instead. Aborting.");
                     debugStringDict (postvals);
                     return reply;
@@ -855,7 +858,7 @@ namespace PayPal
 
                 Decimal amountPaid = Decimal.Parse ((string)postvals["mc_gross"]);
                 if (System.Math.Abs (ConvertAmountToCurrency (txn.Amount) - amountPaid) > (Decimal)0.001) {
-                    m_log.Error ("[PayPal] Expected payment was " + ConvertAmountToCurrency (txn.Amount) +
+                    m_log.Error ("[FreeMoney] Expected payment was " + ConvertAmountToCurrency (txn.Amount) +
                                  " but received " + amountPaid + " " + postvals["mc_currency"] + " instead. Aborting.");
                     debugStringDict (postvals);
                     return reply;
@@ -865,7 +868,7 @@ namespace PayPal
                 // Time to deliver their items. Do it in a seperate thread, so we can return "OK" to PP.
                 Util.FireAndForget (delegate { TransferSuccess (txn); });
             } catch (KeyNotFoundException) {
-                m_log.Error ("[PayPal] Received badly formatted IPN notice. Aborting.");
+                m_log.Error ("[FreeMoney] Received badly formatted IPN notice. Aborting.");
                 debugStringDict (postvals);
                 return reply;
             }
@@ -890,7 +893,7 @@ namespace PayPal
 
 
         public string Name {
-            get { return "PayPalMoneyModule"; }
+            get { return "FreeMoneyMoneyModule"; }
         }
 
         public Type ReplaceableInterface {
@@ -899,25 +902,37 @@ namespace PayPal
 
         public void Initialise (IConfigSource source)
         {
-            m_log.Info ("[PayPal] Initialising.");
+            m_log.Info ("[FreeMoney] Initialising.");
             m_config = source;
 
-            IConfig config = m_config.Configs["PayPal"];
+            IConfig config = m_config.Configs["FreeMoney"];
             
             if (null == config) {
-                m_log.Warn ("[PayPal] No configuration specified. Skipping.");
+                m_log.Warn ("[FreeMoney] No configuration specified. Skipping.");
                 return;
             }
             
             if (!config.GetBoolean ("Enabled", false))
             {
-                m_log.Info ("[PayPal] Not enabled. (to enable set \"Enabled = true\" in [PayPal])");
+                m_log.Info ("[FreeMoney] Not enabled. (to enable set \"Enabled = true\" in [FreeMoney])");
                 return;
             }
 
-            m_ppurl = config.GetString ("PayPalURL", m_ppurl);
-            m_ppprotocol = config.GetString ("PayPalProtocol", m_ppprotocol);
-            m_pprequesturi = config.GetString ("PayPalRequestURI", m_pprequesturi);
+            m_allowPayPal = config.GetBoolean("AllowPayPal", false);
+            m_allowBitcoin = config.GetBoolean("AllowBitcoin", false);
+
+            if (!m_allowBitcoin && !m_allowPayPal) {
+                m_log.Warn ("[FreeMoney] No payment methods permitted - PayPal and Bitcoin both disabled. Skipping.");
+                return;
+            }
+
+            // If we use PayPal, we need a page allowing the user to start a PayPal transaction or choose a Bitcoin one.
+            // If we only do Bitcoin, we can skip that page and take them straight to a Bitcoin transaction.
+            m_directToBitcoin = ( m_allowBitcoin && !m_allowPayPal );
+
+            m_ppurl = config.GetString ("FreeMoneyURL", m_ppurl);
+            m_ppprotocol = config.GetString ("FreeMoneyProtocol", m_ppprotocol);
+            m_pprequesturi = config.GetString ("FreeMoneyRequestURI", m_pprequesturi);
 
             m_allowGridEmails = config.GetBoolean ("AllowGridEmails", false);
             m_allowGroups = config.GetBoolean ("AllowGroups", false);
@@ -926,10 +941,10 @@ namespace PayPal
 
             if (startupConfig != null)
             {
-                m_enabled = (startupConfig.GetString("economymodule", "PayPalMoneyModule") == "PayPalMoneyModule");
+                m_enabled = (startupConfig.GetString("economymodule", "FreeMoneyMoneyModule") == "FreeMoneyMoneyModule");
 
                 if (!m_enabled) {
-                    m_log.Info ("[PayPal] Not enabled. (to enable set \"economymodule = PayPalMoneyModule\" in [Startup])");
+                    m_log.Info ("[FreeMoney] Not enabled. (to enable set \"economymodule = FreeMoneyMoneyModule\" in [Startup])");
                     return;
                 }
             }
@@ -984,7 +999,7 @@ namespace PayPal
                 "Password="+ m_btcconfig["bitcoin_db_password"]+";" +
                 "Pooling=false";
 
-            m_log.Info ("[PayPal] Loaded.");
+            m_log.Info ("[FreeMoney] Loaded.");
             
             m_enabled = true;
         }
@@ -1005,7 +1020,7 @@ namespace PayPal
                 m_scenes.Add (scene);
             
             if (m_enabled) {
-                m_log.Info ("[PayPal] Found Scene.");
+                m_log.Info ("[FreeMoney] Found Scene.");
 
                 scene.RegisterModuleInterface<IMoneyModule> (this);
                 IHttpServer httpServer = MainServer.Instance;
@@ -1136,14 +1151,14 @@ namespace PayPal
             }
             
             if (scene == null || user == null) {
-                m_log.Warn ("[PayPal] Unable to find scene or user! Aborting transaction.");
+                m_log.Warn ("[FreeMoney] Unable to find scene or user! Aborting transaction.");
                 return;
             }
             
             if (salePrice == 0) {
                 IBuySellModule module = scene.RequestModuleInterface<IBuySellModule> ();
                 if (module == null) {
-                    m_log.Error ("[PayPal] Missing BuySellModule! Transaction failed.");
+                    m_log.Error ("[FreeMoney] Missing BuySellModule! Transaction failed.");
                     return;
                 }
                 module.BuyObject (remoteClient, categoryID, localID, saleType, salePrice);
@@ -1152,35 +1167,43 @@ namespace PayPal
             
             SceneObjectPart sop = scene.GetSceneObjectPart (localID);
             if (sop == null) {
-                m_log.Error ("[PayPal] Unable to find SceneObjectPart that was paid. Aborting transaction.");
+                m_log.Error ("[FreeMoney] Unable to find SceneObjectPart that was paid. Aborting transaction.");
                 return;
             }
             
-            string email;
+            string email = "";
             
-            if (sop.OwnerID == sop.GroupID) {
-                if (m_allowGroups) {
-                    if (!GetEmail (scene.RegionInfo.ScopeID, sop.OwnerID, out email)) {
-                        m_log.Warn ("[PayPal] Unknown email address of group " + sop.OwnerID);
-                        return;
+            if (m_allowPayPal) {
+                if (sop.OwnerID == sop.GroupID) {
+                    if (m_allowGroups) {
+                        if (!GetEmail (scene.RegionInfo.ScopeID, sop.OwnerID, out email)) {
+                            m_log.Warn ("[FreeMoney] Unknown email address of group " + sop.OwnerID);
+                            if (!m_allowBitcoin) {
+                                return;
+                            }
+                        }
+                    } else {
+                        m_log.Warn ("[FreeMoney] Purchase of group owned objects is disabled.");
+                        if (!m_allowBitcoin) {
+                            return;
+                        }
                     }
                 } else {
-                    m_log.Warn ("[PayPal] Purchase of group owned objects is disabled.");
-                    return;
-                }
-            } else {
-                if (!GetEmail (scene.RegionInfo.ScopeID, sop.OwnerID, out email)) {
-                    m_log.Warn ("[PayPal] Unknown email address of user " + sop.OwnerID);
-                    return;
+                    if (!GetEmail (scene.RegionInfo.ScopeID, sop.OwnerID, out email)) {
+                        m_log.Warn ("[FreeMoney] Unknown email address of user " + sop.OwnerID);
+                        if (!m_allowBitcoin) {
+                            return;
+                        }
+                    }
                 }
             }
             
-            m_log.Info ("[PayPal] Start: " + agentID + " wants to buy object " + sop.UUID + " from " + sop.OwnerID +
+            m_log.Info ("[FreeMoney] Start: " + agentID + " wants to buy object " + sop.UUID + " from " + sop.OwnerID +
                         " with email " + email + " costing US$ cents " + salePrice);
             
-            PayPalTransaction txn = new PayPalTransaction (agentID, sop.OwnerID, email, salePrice, scene, sop.UUID,
+            FreeMoneyTransaction txn = new FreeMoneyTransaction (agentID, sop.OwnerID, email, salePrice, scene, sop.UUID,
                                                            "Item Purchase - " + sop.Name + " (" + saleType + ")",
-                                                           PayPalTransaction.InternalTransactionType.Purchase,
+                                                           FreeMoneyTransaction.InternalTransactionType.Purchase,
                                                            categoryID, saleType);
             
             // Add transaction to queue
@@ -1197,12 +1220,12 @@ namespace PayPal
                 pageName = "btcgo";
             } 
 
-            user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm purchase?", "http://" +
+            user.SendLoadURL ("FreeMoney", txn.ObjectID, txn.To, false, "Confirm purchase?", "http://" +
                               baseUrl + "/"+pageName+"/?txn=" + txn.TxID);
         }
 
         //public bool InitializeBitcoinTransaction(Dictionary<string,string> transaction_params, string base_url) 
-        private BitcoinTransaction InitializeBitcoinTransaction(PayPalTransaction txn, string base_url) 
+        private BitcoinTransaction InitializeBitcoinTransaction(FreeMoneyTransaction txn, string base_url) 
         {
 
             // ED TODO: Put in params
@@ -1231,7 +1254,7 @@ namespace PayPal
 
 
         /*
-        private bool initializeBitcoinTransaction(PayPalTransaction txn, string baseUrl) {
+        private bool initializeBitcoinTransaction(FreeMoneyTransaction txn, string baseUrl) {
 
             // Hard-coding this for now - may end up building everything into mono, in which case it will go away.
             string bitcoin_server =  m_btcprotocol + "://" + m_btcurl + m_btcrequesturi + "?cmd=initialize_transaction"; 
@@ -1264,7 +1287,7 @@ namespace PayPal
             }
             
             if (httpWebResponse.StatusCode != HttpStatusCode.OK) {
-                m_log.Error ("[PayPal] Bitcoin transaction initialzation != 200. Aborting.");
+                m_log.Error ("[FreeMoney] Bitcoin transaction initialzation != 200. Aborting.");
                 return false;
             }
 
@@ -1389,7 +1412,7 @@ namespace PayPal
             }
             
             if (scene == null || user == null) {
-                m_log.Error ("[PayPal] Unable to find scene or user! Aborting transaction.");
+                m_log.Error ("[FreeMoney] Unable to find scene or user! Aborting transaction.");
                 return;
             }
             
@@ -1398,26 +1421,26 @@ namespace PayPal
             if ((e.parcelOwnerID == e.groupId) || e.groupOwned) {
                 if (m_allowGroups) {
                     if (!GetEmail (scene.RegionInfo.ScopeID, e.parcelOwnerID, out email)) {
-                        m_log.Warn ("[PayPal] Unknown email address of group " + e.parcelOwnerID);
+                        m_log.Warn ("[FreeMoney] Unknown email address of group " + e.parcelOwnerID);
                         return;
                     }
                 } else {
-                    m_log.Warn ("[PayPal] Purchases of group owned land is disabled.");
+                    m_log.Warn ("[FreeMoney] Purchases of group owned land is disabled.");
                     return;
                 }
             } else {
                 if (!GetEmail (scene.RegionInfo.ScopeID, e.parcelOwnerID, out email)) {
-                    m_log.Warn ("[PayPal] Unknown email address of user " + e.parcelOwnerID);
+                    m_log.Warn ("[FreeMoney] Unknown email address of user " + e.parcelOwnerID);
                     return;
                 }
             }
             
-            m_log.Info ("[PayPal] Start: " + e.agentId + " wants to buy land from " + e.parcelOwnerID +
+            m_log.Info ("[FreeMoney] Start: " + e.agentId + " wants to buy land from " + e.parcelOwnerID +
                         " with email " + email + " costing US$ cents " + e.parcelPrice);
             
-            PayPalTransaction txn;
-            txn = new PayPalTransaction (e.agentId, e.parcelOwnerID, email, e.parcelPrice, scene,
-                                         "Buy Land", PayPalTransaction.InternalTransactionType.Land, e);
+            FreeMoneyTransaction txn;
+            txn = new FreeMoneyTransaction (e.agentId, e.parcelOwnerID, email, e.parcelPrice, scene,
+                                         "Buy Land", FreeMoneyTransaction.InternalTransactionType.Land, e);
             
             // Add transaction to queue
             lock (m_transactionsInProgress)
@@ -1433,7 +1456,7 @@ namespace PayPal
                 pageName = "btcgo";
             } 
             
-            user.SendLoadURL ("PayPal", txn.ObjectID, txn.To, false, "Confirm payment?", "http://" +
+            user.SendLoadURL ("FreeMoney", txn.ObjectID, txn.To, false, "Confirm payment?", "http://" +
                               baseUrl + "/"+pageName+"/?txn=" + txn.TxID);
 
         }
@@ -1515,7 +1538,7 @@ namespace PayPal
             if (!m_allowGridEmails)
                 return false;
             
-            m_log.Info ("[PayPal] Fetching email address from grid for " + key);
+            m_log.Info ("[FreeMoney] Fetching email address from grid for " + key);
             
             IUserAccountService userAccountService = m_scenes[0].UserAccountService;
             UserAccount ua;
@@ -1562,7 +1585,7 @@ namespace PayPal
             msg.toAgentID = new Guid (dest.ToString ());
             msg.imSessionID = new Guid (transaction.ToString ());
             msg.timestamp = (uint)Util.UnixTimeSinceEpoch ();
-            msg.fromAgentName = "PayPal";
+            msg.fromAgentName = "FreeMoney";
             msg.dialog = (byte)19;
             // Object msg
             msg.fromGroup = false;
@@ -1601,13 +1624,13 @@ namespace PayPal
 
         public void FirstRegionLoaded ()
         {
-            m_log.Info ("[PayPal] Loading predefined users and groups.");
+            m_log.Info ("[FreeMoney] Loading predefined users and groups.");
 
             // Users
             IConfig users = m_config.Configs["PayPal Users"];
             
             if (null == users) {
-                m_log.Warn ("[PayPal] No users specified in local ini file.");
+                m_log.Warn ("[FreeMoney] No users specified in local ini file.");
             } else {
                 IUserAccountService userAccountService = m_scenes[0].UserAccountService;
                 
@@ -1619,28 +1642,28 @@ namespace PayPal
                 foreach (string user in users.GetKeys ()) {
                     UUID tmp;
                     if (UUID.TryParse (user, out tmp)) {
-                        m_log.Debug ("[PayPal] User is UUID, skipping lookup...");
+                        m_log.Debug ("[FreeMoney] User is UUID, skipping lookup...");
                         string email = users.GetString (user);
                         m_usersemail[tmp] = email;
                         continue;
                     }
                     
-                    m_log.Debug ("[PayPal] Looking up UUID for user " + user);
+                    m_log.Debug ("[FreeMoney] Looking up UUID for user " + user);
                     string[] username = user.Split (new[] { ' ' }, 2);
                     UserAccount ua = userAccountService.GetUserAccount (UUID.Zero, username[0], username[1]);
                     
                     if (ua != null) {
-                        m_log.Debug ("[PayPal] Found user, " + user + " = " + ua.PrincipalID);
+                        m_log.Debug ("[FreeMoney] Found user, " + user + " = " + ua.PrincipalID);
                         string email = users.GetString (user);
                         
                         if (string.IsNullOrEmpty (email)) {
-                            m_log.Error ("[PayPal] PayPal email address not set for user " + user +
-                                         " in [PayPal Users] config section. Skipping.");
+                            m_log.Error ("[FreeMoney] FreeMoney email address not set for user " + user +
+                                         " in [FreeMoney Users] config section. Skipping.");
                             m_usersemail[ua.PrincipalID] = "";
                         } else {
-                            if (!PayPalHelpers.IsValidEmail (email)) {
-                                m_log.Error ("[PayPal] PayPal email address not valid for user " + user +
-                                             " in [PayPal Users] config section. Skipping.");
+                            if (!FreeMoneyHelpers.IsValidEmail (email)) {
+                                m_log.Error ("[FreeMoney] FreeMoney email address not valid for user " + user +
+                                             " in [FreeMoney Users] config section. Skipping.");
                                 m_usersemail[ua.PrincipalID] = "";
                             } else {
                                 m_usersemail[ua.PrincipalID] = email;
@@ -1648,7 +1671,7 @@ namespace PayPal
                         }
                     // UserProfileData was null
                     } else {
-                        m_log.Error ("[PayPal] Error, User Profile not found for user " + user +
+                        m_log.Error ("[FreeMoney] Error, User Profile not found for user " + user +
                                      ". Check the spelling and/or any associated grid services.");
                     }
                 }
@@ -1658,7 +1681,7 @@ namespace PayPal
             IConfig groups = m_config.Configs["PayPal Groups"];
             
             if (!m_allowGroups || null == groups) {
-                m_log.Warn ("[PayPal] Groups disabled or no groups specified in local ini file.");
+                m_log.Warn ("[FreeMoney] Groups disabled or no groups specified in local ini file.");
             } else {
                 // This aborts at the slightest provocation
                 // We realise this may be inconvenient for you,
@@ -1666,18 +1689,18 @@ namespace PayPal
                 // financial matters to error check everything.
                 
                 foreach (string @group in groups.GetKeys ()) {
-                    m_log.Debug ("[PayPal] Defining email address for UUID for group " + @group);
+                    m_log.Debug ("[FreeMoney] Defining email address for UUID for group " + @group);
                     UUID groupID = new UUID (@group);
                     string email = groups.GetString (@group);
                     
                     if (string.IsNullOrEmpty (email)) {
-                        m_log.Error ("[PayPal] PayPal email address not set for group " +
-                                     @group + " in [PayPal Groups] config section. Skipping.");
+                        m_log.Error ("[FreeMoney] FreeMoney email address not set for group " +
+                                     @group + " in [FreeMoney Groups] config section. Skipping.");
                         m_usersemail[groupID] = "";
                     } else {
-                        if (!PayPalHelpers.IsValidEmail (email)) {
-                            m_log.Error ("[PayPal] PayPal email address not valid for group " +
-                                         @group + " in [PayPal Groups] config section. Skipping.");
+                        if (!FreeMoneyHelpers.IsValidEmail (email)) {
+                            m_log.Error ("[FreeMoney] FreeMoney email address not valid for group " +
+                                         @group + " in [FreeMoney Groups] config section. Skipping.");
                             m_usersemail[groupID] = "";
                         } else {
                             m_usersemail[groupID] = email;
@@ -1690,7 +1713,7 @@ namespace PayPal
             MainServer.Instance.AddHTTPHandler ("/pp/", UserPage);
             MainServer.Instance.AddHTTPHandler ("/ppipn/", IPN);
 
-	    // For now Bitcoin uses the same IPN as PayPal. But we'll give it a different URL to make it clear what's going on.
+	    // For now Bitcoin uses the same IPN as FreeMoney. But we'll give it a different URL to make it clear what's going on.
             MainServer.Instance.AddHTTPHandler ("/register_addresses/", HandleBitcoinRegistrationRequest); 
             MainServer.Instance.AddHTTPHandler ("/btcgo/", BitcoinInitializePaymentPage); 
             MainServer.Instance.AddHTTPHandler ("/btcping/", HandleBitcoinConfirmationPing); 
@@ -1718,7 +1741,7 @@ namespace PayPal
         // This will be the maximum amount the user
         // is able to spend due to client limitations.
         // It is set to the equivilent of US$10K
-        // as this is PayPal's maximum transaction
+        // as this is FreeMoney's maximum transaction
         // size.
         //
         // This is 1 Million cents.

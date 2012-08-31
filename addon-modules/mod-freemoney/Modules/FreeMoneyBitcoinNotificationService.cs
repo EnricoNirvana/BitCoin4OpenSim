@@ -19,7 +19,7 @@ using Newtonsoft.Json.Linq;
 
 
 
-namespace PayPal
+namespace FreeMoney 
 {
     public class BitcoinNotificationService
     {

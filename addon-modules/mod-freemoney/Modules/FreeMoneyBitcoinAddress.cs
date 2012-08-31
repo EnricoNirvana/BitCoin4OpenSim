@@ -8,7 +8,7 @@ using System.Web;
 using System.Security.Cryptography;
 using MySql.Data.MySqlClient;
 
-namespace PayPal
+namespace FreeMoney 
 {
     public class BitcoinAddress
     {

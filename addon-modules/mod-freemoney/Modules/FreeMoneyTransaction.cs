@@ -28,9 +28,9 @@ using System.Security.Cryptography;
 using OpenMetaverse;
 using OpenSim.Region.Framework.Scenes;
 
-namespace PayPal
+namespace FreeMoney
 {
-    internal class PayPalTransaction
+    internal class FreeMoneyTransaction
     {
         internal enum InternalTransactionType
         {
@@ -69,7 +69,7 @@ namespace PayPal
         public readonly UUID InternalPurchaseFolderID;
         public readonly byte InternalPurchaseType;
 
-        public PayPalTransaction(UUID from, UUID to, string sellersEmail, int amount, Scene scene, string description, InternalTransactionType internalType)
+        public FreeMoneyTransaction(UUID from, UUID to, string sellersEmail, int amount, Scene scene, string description, InternalTransactionType internalType)
         {
             From = from;
             InternalType = internalType;
@@ -90,7 +90,7 @@ namespace PayPal
             TxID = new UUID(txID);
         }
         
-        public PayPalTransaction(UUID from, UUID to, string sellersEmail, int amount, Scene scene, string description, InternalTransactionType internalType, EventManager.LandBuyArgs e)
+        public FreeMoneyTransaction(UUID from, UUID to, string sellersEmail, int amount, Scene scene, string description, InternalTransactionType internalType, EventManager.LandBuyArgs e)
         {
             From = from;
             InternalType = internalType;
@@ -112,7 +112,7 @@ namespace PayPal
             TxID = new UUID(txID);
         }
 
-        public PayPalTransaction(UUID from, UUID to, string sellersEmail, int amount, Scene scene, UUID objectID, string description, InternalTransactionType internalType)
+        public FreeMoneyTransaction(UUID from, UUID to, string sellersEmail, int amount, Scene scene, UUID objectID, string description, InternalTransactionType internalType)
         {
             From = from;
             InternalType = internalType;
@@ -134,7 +134,7 @@ namespace PayPal
         }
 
 
-        public PayPalTransaction(UUID from, UUID to, string sellersEmail, int amount, Scene scene, UUID objectID, string description, InternalTransactionType internalType, UUID folderID, byte saleType)
+        public FreeMoneyTransaction(UUID from, UUID to, string sellersEmail, int amount, Scene scene, UUID objectID, string description, InternalTransactionType internalType, UUID folderID, byte saleType)
         {
             From = from;
             InternalType = internalType;

@@ -13,7 +13,7 @@ using OpenMetaverse;
 
 
 
-namespace PayPal
+namespace FreeMoney
 {
     public class BitcoinTransaction
     {
