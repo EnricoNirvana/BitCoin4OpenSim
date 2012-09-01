@@ -30,8 +30,7 @@ namespace FreeMoney
 
         }
 
-
-        public string AddressForAvatar(string user_identifier) {
+        public string AddressForAvatar(string user_identifier, string user_email) {
 
             string query = "select a.btc_address as btc_address from opensim_btc_addresses a left outer join opensim_btc_transactions t on a.btc_address=t.btc_address where a.user_identifier=?user_identifier AND t.confirmation_sent_ts > 0 OR t.id IS NULL limit 1;";
 
@@ -70,22 +69,21 @@ namespace FreeMoney
 
             }
 
-            /*
-            // No free addresses found.
-            // Try to create one with an address->email service.
-            if (!$btc_address = BitcoinAddressForEmailService::BTCAddressForEmail($av)) {
-                return false;
+            if (user_email == "") {
+                return "";
             }
 
-            $address = new BitcoinAddress($mysqli);
-            $address->btc_address = $btc_address;
-            $address->user_identifier = $av;
+            // No address yet - try to create one with an email service.
+            BitcoinAddressForEmailService serv = new BitcoinAddressForEmailService(m_config);
+            string new_btc_address = serv.BTCAddressForEmail(user_email);
 
-            if ($address->insert()) {
-                return $address->btc_address;
+            if (new_btc_address != "") {
+                // create a new object - we may want to make this whole method static.
+                BitcoinAddress addr = new BitcoinAddress(m_connectionString, m_config);
+                if (addr.Create(user_identifier, new_btc_address)) {
+                    return new_btc_address;
+                }
             }
-
-            */
         
             return "";
 

@@ -22,8 +22,12 @@ namespace FreeMoney
         private Dictionary<string, string> m_config;
 
 
-        // The payee. In the PayPal world this would be "business", which is an email address. We will have to do some kind of lookup to get a Bitcoin address for this person.
+        // The payee. This will be a user or group UUID.
         private string m_payee = ""; 
+
+        // The payee. In the PayPal world this would be "business", which is an email address. 
+        // This is only used if we need an email address to issue a new Bitcoin address using an external service.
+        private string m_payee_email = ""; 
 
         // The name of the object to be transferred, for humans.
         private string m_item_name = ""; 
@@ -72,16 +76,18 @@ namespace FreeMoney
 
         }
 
-        public bool Initialize(Dictionary<string,string> transaction_params) {
+        public bool Initialize(Dictionary<string,string> transaction_params, int num_confirmations_required) {
 
 
             m_transaction_code = transaction_params["item_number"];
-            m_payee = transaction_params["business"];
+            m_payee = transaction_params["payee"];
+            m_payee_email = transaction_params["business"];
             m_item_name = transaction_params["item_name"];
             m_original_amount =  (float) Convert.ToDouble(transaction_params["amount"]);
             m_original_currency_code = transaction_params["currency_code"];
             m_notify_url = transaction_params["notify_url"];
-            m_num_confirmations_required = 0; // TODO: We may get this from the server
+            m_num_confirmations_required = num_confirmations_required;
+
 
             /*
             if (!$this->_mysqli) {
@@ -187,12 +193,6 @@ namespace FreeMoney
 
         }
 
-        private float ToBTC(float original_amount, string currency_code) 
-        {
-            // TODO: Do this properly...
-            return (float)(0.001 * original_amount);
-        }
-
         private bool Create() 
         {
 
@@ -205,13 +205,12 @@ namespace FreeMoney
                 m_btc_amount = ToBTC(m_original_amount, m_original_currency_code); 
             }
 
-            /*
-            // TODO: Get address from BitcoinAddress object
-            if (!m_btc_address = BitcoinAddress.AddressForAvatar(m_payee)) {
+            BitcoinAddress addr = new BitcoinAddress(m_connectionString, m_config);
+            m_btc_address = addr.AddressForAvatar(m_payee, m_payee_email);
+            if (m_btc_address == "") {
                 return false;
             }
-            */
-            m_btc_address = "15S5AqChfugJRaUZSAe2tkvhjqMkn3qo7y";
+            //m_btc_address = "15S5AqChfugJRaUZSAe2tkvhjqMkn3qo7y";
 
             string query = "";
             query += "INSERT INTO opensim_btc_transactions (";
@@ -276,12 +275,22 @@ namespace FreeMoney
 
         }
 
-        float ToBTC(float amount, float currency_code) {
+        float ToBTC(float amount, string currency_code) {
 
-            //float btc = BitcoinExchangeRateService.ToBTC(amount, currency_code);
-            // TODO
-            float btc = amount;
-            return btc;
+            Console.WriteLine("converting");
+
+            // If we have a hard-coded exchange rate, use that. 
+            // If not, try to use a dynamic service
+
+            // TODO: With the dynamic service, cache the result.
+            float exchange_rate = (float)Convert.ToDouble(m_config["bitcoin_exchange_rate"]);
+            if (exchange_rate == 0) {
+                Console.WriteLine("looking up service");
+                BitcoinExchangeRateService serv = new BitcoinExchangeRateService(m_config);
+                exchange_rate = serv.LookupRate(currency_code);
+            }
+
+            return (amount / exchange_rate);
 
         }
 

@@ -80,6 +80,13 @@ namespace FreeMoney
         private bool m_allowPayPal = false;
         private bool m_allowBitcoin = false;
 
+        private int m_btcNumberOfConfirmationsRequired = 0;
+
+        private string m_gridCurrencyCode = "USD";
+        private string m_gridCurrencyText = "US$";
+        private string m_gridCurrencySmallDenominationText = "US$ cents";
+        private float m_gridCurrencySmallDenominationFraction = 100F;
+        
         private readonly object m_setupLock = new object ();
         private bool m_setup;
 
@@ -939,6 +946,7 @@ namespace FreeMoney
             
             IConfig startupConfig = m_config.Configs["Startup"];
 
+
             if (startupConfig != null)
             {
                 m_enabled = (startupConfig.GetString("economymodule", "FreeMoneyMoneyModule") == "FreeMoneyMoneyModule");
@@ -970,6 +978,14 @@ namespace FreeMoney
                 PriceGroupCreate = economyConfig.GetInt("PriceGroupCreate", -1);
             }
 
+            m_gridCurrencyCode = config.GetString("GridCurrencyCode", "USD");
+            m_gridCurrencyText = config.GetString("GridCurrencyText", "US$");
+            m_gridCurrencySmallDenominationText  = config.GetString("GridCurrencySmallDenominationText", "US$ cents");
+            m_gridCurrencySmallDenominationFraction = config.GetFloat("GridCurrencySmallDenominationFraction", 100.0F);
+
+
+            m_btcNumberOfConfirmationsRequired = config.GetInt("BitcoinNumberOfConfirmations", 0);
+
             // TODO: Move to config file
 
             m_btcconfig.Add("bitcoin_db_host", config.GetString ("BitcoinDBHost", "localhost"));
@@ -991,6 +1007,10 @@ namespace FreeMoney
             m_btcconfig.Add("bitcoin_ping_service_1_verificationkey", config.GetString ("BitcoinConfirmationService1VerificationKey", ""));
 
             m_btcconfig.Add("bitcoin_exchange_rate_service_1_url", config.GetString ("BitcoinExchangeRateService1", "http://bitcoincharts.com/t/weighted_prices.json"));
+
+            // Fixed exchange rate.
+            // If this is zero, we'll use an external lookup service.
+            m_btcconfig.Add("bitcoin_exchange_rate", config.GetString("BitcoinExchangeRate", "0"));
 
             m_connectionString = "" +
                 "Server="  + m_btcconfig["bitcoin_db_host"]+";" +
@@ -1233,6 +1253,7 @@ namespace FreeMoney
 
             Dictionary<string, string> transaction_params = new Dictionary<string, string>();
             //transaction_params.Add("payee", txn.SellersEmail);
+            transaction_params.Add("payee", txn.To.ToString());
             transaction_params.Add("business", txn.SellersEmail);
             transaction_params.Add("item_name", txn.Description);
             transaction_params.Add("item_number", txn.TxID.ToString());
@@ -1246,7 +1267,7 @@ namespace FreeMoney
             }
 
             BitcoinTransaction btc_trans = new BitcoinTransaction(m_connectionString, m_btcconfig, base_url);
-            btc_trans.Initialize(transaction_params);
+            btc_trans.Initialize(transaction_params, m_btcNumberOfConfirmationsRequired);
 
             return btc_trans;
 
