@@ -36,13 +36,13 @@ namespace FreeMoney
         private string m_transaction_code = ""; 
 
         // The original amount requested in the original currency. If quoted in a non-BTC currency, we may convert it. In PayPal, "amount".
-        private float m_original_amount = 0.0F; 
+        private decimal m_original_amount = 0.0m; 
 
         // The currency originally requested. In PayPal, "currency_code".
         private string m_original_currency_code = ""; 
 
         // The BTC equivalent at the time when the payment address was given to the user.
-        private float m_btc_amount = 0.0F; 
+        private decimal m_btc_amount = 0.0m; 
 
         // The URL we  should notify when the payment is confirmed.
         private string m_notify_url = ""; 
@@ -65,8 +65,9 @@ namespace FreeMoney
         // A timestamp for the time we notified the server that payment was complete, causing object delivery etc.
         private int m_confirmation_sent_ts = 0; 
 
-
         private string m_base_url = "";
+
+        private bool m_has_errors = false;
 
         public BitcoinTransaction(string dbConnectionString, Dictionary<string, string> config, string base_url) {
 
@@ -78,12 +79,11 @@ namespace FreeMoney
 
         public bool Initialize(Dictionary<string,string> transaction_params, int num_confirmations_required) {
 
-
             m_transaction_code = transaction_params["item_number"];
             m_payee = transaction_params["payee"];
             m_payee_email = transaction_params["business"];
             m_item_name = transaction_params["item_name"];
-            m_original_amount =  (float) Convert.ToDouble(transaction_params["amount"]);
+            m_original_amount = Decimal.Parse(transaction_params["amount"]);
             m_original_currency_code = transaction_params["currency_code"];
             m_notify_url = transaction_params["notify_url"];
             m_num_confirmations_required = num_confirmations_required;
@@ -97,17 +97,24 @@ namespace FreeMoney
             */
 
             if (m_transaction_code == "") {
+                m_has_errors = true;
                 return false;
             }
     
             if ( !(Populate("transaction_code") || Create()) ) {
+                m_has_errors = true;
                 Console.WriteLine("could not create");
                 return false;
             }
             Console.WriteLine("trying notification service");
 
             BitcoinNotificationService notification_service = new BitcoinNotificationService(m_config, m_base_url);
-            return (notification_service.Subscribe(m_btc_address, m_num_confirmations_required));
+            if (!notification_service.Subscribe(m_btc_address, m_num_confirmations_required)) {
+                m_has_errors = true;
+                return false;
+            }
+    
+            return true;
 
         }
 
@@ -161,8 +168,8 @@ namespace FreeMoney
                                 m_payee = (string)dbReader["payee"];
                                 m_item_name = (string)dbReader["item_name"];
                                 m_transaction_code = (string)dbReader["transaction_code"];
-                                m_original_amount = (float)dbReader["original_amount"];
-                                m_btc_amount = (float)dbReader["btc_amount"];
+                                m_original_amount = (decimal)dbReader["original_amount"];
+                                m_btc_amount = (decimal)dbReader["btc_amount"];
                                 m_notify_url = (string)dbReader["notify_url"];
                                 m_btc_address = (string)dbReader["btc_address"];
                                 m_num_confirmations_required = (int)dbReader["num_confirmations_required"];
@@ -275,7 +282,7 @@ namespace FreeMoney
 
         }
 
-        float ToBTC(float amount, string currency_code) {
+        decimal ToBTC(decimal amount, string currency_code) {
 
             Console.WriteLine("converting");
 
@@ -283,14 +290,14 @@ namespace FreeMoney
             // If not, try to use a dynamic service
 
             // TODO: With the dynamic service, cache the result.
-            float exchange_rate = (float)Convert.ToDouble(m_config["bitcoin_exchange_rate"]);
-            if (exchange_rate == 0) {
+            decimal exchange_rate = Decimal.Parse(m_config["bitcoin_exchange_rate"]);
+            if (exchange_rate == 0m) {
                 Console.WriteLine("looking up service");
                 BitcoinExchangeRateService serv = new BitcoinExchangeRateService(m_config);
                 exchange_rate = serv.LookupRate(currency_code);
             }
 
-            return (amount / exchange_rate);
+            return Decimal.Round( (amount / exchange_rate), 4);
 
         }
 
@@ -385,7 +392,7 @@ namespace FreeMoney
             return (m_confirmation_sent_ts > 0);
         }
 
-        public float GetBTCAmount() {
+        public decimal GetBTCAmount() {
             return m_btc_amount;
         }
 
@@ -395,6 +402,10 @@ namespace FreeMoney
 
         public string GetTransactionID() {
             return m_transaction_code;
+        }
+
+        public bool HasErrors() {
+            return m_has_errors;
         }
 
     } 

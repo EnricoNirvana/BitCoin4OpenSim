@@ -85,7 +85,7 @@ namespace FreeMoney
         private string m_gridCurrencyCode = "USD";
         private string m_gridCurrencyText = "US$";
         private string m_gridCurrencySmallDenominationText = "US$ cents";
-        private float m_gridCurrencySmallDenominationFraction = 100F;
+        private decimal m_gridCurrencySmallDenominationFraction = 100m;
         
         private readonly object m_setupLock = new object ();
         private bool m_setup;
@@ -333,9 +333,9 @@ namespace FreeMoney
         }
 
         // Currently hard coded to $0.01 = OS$1
-        static decimal ConvertAmountToCurrency (int amount)
+        private decimal ConvertAmountToCurrency (int amount)
         {
-            return amount / (decimal)100;
+            return amount / m_gridCurrencySmallDenominationFraction;
         }
 
 
@@ -344,7 +344,6 @@ namespace FreeMoney
         {
 
             Dictionary<string, object> postvals = ServerUtils.ParseQueryString ((string)request_hash["body"]);
-            Dictionary<string, object> getvals = new Dictionary<string, object>();
 
             //string base_url = "http://beech/TODO";
 
@@ -354,16 +353,27 @@ namespace FreeMoney
             string btc_session_id = "";
             if (postvals.ContainsKey("btc_session_id")) {
                 btc_session_id = (string)postvals["btc_session_id"];
-            } else if (getvals.ContainsKey("btc_session_id")) {
-                btc_session_id = (string)getvals["btc_session_id"];
+            } else if (request_hash.ContainsKey("btc_session_id")) {
+                btc_session_id = (string)request_hash["btc_session_id"];
             }
+
+            Console.WriteLine("btc session id is "+btc_session_id);
 
             if (btc_session_id == "") {
                 has_errors = true;
             }
 
-            // TODO: Get this from the session
-            string user_identifier = "test@edochan.com";
+            string user_identifier = "";
+            UUID session_uuid = new UUID (btc_session_id);
+            if (m_sessionkeyuser.ContainsKey(session_uuid)) {
+                user_identifier = m_sessionkeyuser[session_uuid].ToString();
+                if (user_identifier == "") {
+                    has_errors = true;
+                }
+            } else {
+                has_errors = true;
+            }
+
             bool is_submit = false;
 
             List<string> addresses_created = new List<string>();
@@ -387,8 +397,9 @@ namespace FreeMoney
 
             }
 
-            int count_all_addresses = 0; //TODO
-            int count_usable_addresses = 0; //TODO
+            BitcoinAddress count_btc_addr = new BitcoinAddress(m_connectionString, m_btcconfig);
+            int count_all_addresses = count_btc_addr.CountAddressesForAvatar(user_identifier, true);
+            int count_usable_addresses = count_btc_addr.CountAddressesForAvatar(user_identifier, false);
 
             Dictionary<string, string> replacements = new Dictionary<string, string> ();
             //replacements.Add ("{BTC_SESSION_ID}",  HttpUtility.HtmlEncode(btc_session_id));
@@ -579,23 +590,30 @@ namespace FreeMoney
             bool has_errors = false;
 
             BitcoinTransaction btc_trans = InitializeBitcoinTransaction(txn, baseUrl);
+            has_errors = btc_trans.HasErrors();
  
-            // TODO: Check initialize worked OK
-
-            int count_all_addresses = 10;
-            int count_usable_addresses = 5;
+            string user_identifier = txn.From.ToString();
+            BitcoinAddress count_btc_addr = new BitcoinAddress(m_connectionString, m_btcconfig);
+            int count_all_addresses = count_btc_addr.CountAddressesForAvatar(user_identifier, true);
+            int count_usable_addresses = count_btc_addr.CountAddressesForAvatar(user_identifier, false);
 
             Dictionary<string, string> replacements = new Dictionary<string, string> ();
             //replacements.Add ("{BTC_SESSION_ID}",  HttpUtility.HtmlEncode(btc_session_id));
             //TODO put HttpUtility back
             replacements.Add ("{BTC_SESSION_ID}", GetSessionKey( txn.From ).ToString());
             bool is_submit = true; // TODO
-            if (is_submit) {
+            if (is_submit && !has_errors) {
+                replacements.Add ("{BTC_ERRORS}",  "");
                 replacements.Add ("{BTC_DISABLE_COMPLETE_START}",  "<!--");
                 replacements.Add ("{BTC_DISABLE_COMPLETE_END}",  "-->");
                 replacements.Add ("{BTC_DISABLE_INCOMPLETE_START}",  "");
                 replacements.Add ("{BTC_DISABLE_INCOMPLETE_END}",  "");
             } else {
+                if (has_errors) {
+                    replacements.Add ("{BTC_ERRORS}", "<p><strong>Sorry, I couldn't set up this payment.</strong></p>");
+                } else {
+                    replacements.Add ("{BTC_ERRORS}",  "");
+                }
                 replacements.Add ("{BTC_DISABLE_INCOMPLETE_START}",  "<!--");
                 replacements.Add ("{BTC_DISABLE_INCOMPLETE_END}",  "-->");
                 replacements.Add ("{BTC_DISABLE_COMPLETE_START}",  "");
@@ -664,7 +682,7 @@ namespace FreeMoney
                     HttpUtility.UrlEncode ("1") + "&return=" + HttpUtility.UrlEncode ("http://" + baseUrl + "/") +
                     "&cancel_return=" + HttpUtility.UrlEncode ("http://" + baseUrl + "/") + "&notify_url=" +
                     HttpUtility.UrlEncode ("http://" + baseUrl + "/ppipn/") + "&no_note=" +
-                    HttpUtility.UrlEncode ("1") + "&currency_code=" + HttpUtility.UrlEncode ("USD") + "&lc=" +
+                    HttpUtility.UrlEncode ("1") + "&currency_code=" + HttpUtility.UrlEncode (m_gridCurrencyCode) + "&lc=" +
                     HttpUtility.UrlEncode ("US") + "&bn=" + HttpUtility.UrlEncode ("PP-BuyNowBF") + "&charset=" +
                     HttpUtility.UrlEncode ("UTF-8") + "";
 
@@ -682,7 +700,7 @@ namespace FreeMoney
             replacements.Add ("{ITEM}",  HttpUtility.HtmlEncode(txn.Description));
             replacements.Add ("{AMOUNT}", HttpUtility.HtmlEncode(String.Format ("{0:0.00}", ConvertAmountToCurrency (txn.Amount))));
             replacements.Add ("{AMOUNTOS}", HttpUtility.HtmlEncode(txn.Amount.ToString ()));
-            replacements.Add ("{CURRENCYCODE}", HttpUtility.HtmlEncode("USD"));
+            replacements.Add ("{CURRENCYCODE}", HttpUtility.HtmlEncode(m_gridCurrencyText));
             replacements.Add ("{BILLINGLINK}", url);
             replacements.Add ("{BTCBILLINGLINK}", btcurl);
             replacements.Add ("{BTCBILLINGHIDDENFIELDS}", btcfields);
@@ -834,7 +852,7 @@ namespace FreeMoney
                     return reply;
                 }
                 
-                if (((string)postvals["mc_currency"]).ToUpper () != "USD") {
+                if (((string)postvals["mc_currency"]).ToUpper () != m_gridCurrencyCode) {
                     m_log.Error ("[FreeMoney] Payment was made in an incorrect currency (" +
                                  postvals["mc_currency"] + "). Aborting.");
                     debugStringDict (postvals);
@@ -981,12 +999,9 @@ namespace FreeMoney
             m_gridCurrencyCode = config.GetString("GridCurrencyCode", "USD");
             m_gridCurrencyText = config.GetString("GridCurrencyText", "US$");
             m_gridCurrencySmallDenominationText  = config.GetString("GridCurrencySmallDenominationText", "US$ cents");
-            m_gridCurrencySmallDenominationFraction = config.GetFloat("GridCurrencySmallDenominationFraction", 100.0F);
-
+            m_gridCurrencySmallDenominationFraction = Convert.ToDecimal(config.GetFloat("GridCurrencySmallDenominationFraction", 100.0f));
 
             m_btcNumberOfConfirmationsRequired = config.GetInt("BitcoinNumberOfConfirmations", 0);
-
-            // TODO: Move to config file
 
             m_btcconfig.Add("bitcoin_db_host", config.GetString ("BitcoinDBHost", "localhost"));
             m_btcconfig.Add("bitcoin_db_name", config.GetString ("BitcoinDBName", "opensim_btc"));
@@ -1257,8 +1272,8 @@ namespace FreeMoney
             transaction_params.Add("business", txn.SellersEmail);
             transaction_params.Add("item_name", txn.Description);
             transaction_params.Add("item_number", txn.TxID.ToString());
-            transaction_params.Add("amount", txn.Amount.ToString());
-            transaction_params.Add("currency_code", "USD");
+            transaction_params.Add("amount", ConvertAmountToCurrency(txn.Amount).ToString());
+            transaction_params.Add("currency_code", m_gridCurrencyCode);
             transaction_params.Add("notify_url", "");
 
             // Optionally, use an external URL that's accessible from outside NAT.

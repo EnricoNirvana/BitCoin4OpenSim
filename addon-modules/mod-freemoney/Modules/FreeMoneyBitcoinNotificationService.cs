@@ -31,7 +31,7 @@ namespace FreeMoney
 
         private string m_btc_address = "";
         private int m_num_confirmations_received = 0;
-        private float m_amount_received = 0.0F;
+        private decimal m_amount_received = 0.0m;
         private string m_signature = "";
 
         public BitcoinNotificationService(Dictionary<string, string> config, string base_url) {
@@ -47,7 +47,7 @@ namespace FreeMoney
             return m_num_confirmations_received; 
         }
 
-        public float AmountReceived() {
+        public decimal AmountReceived() {
             return m_amount_received;
         }
 
@@ -159,7 +159,7 @@ namespace FreeMoney
     
                 m_signature = (string)jo["signature"];
                 m_btc_address = (string)signed_data["address"];
-                m_amount_received = (float) Convert.ToDouble((string)signed_data["amount_btc"]);
+                m_amount_received = Decimal.Parse((string)signed_data["amount_btc"]);
                 m_num_confirmations_received = (int)signed_data["confirmations"];
                 //m_txhash = (string)signed_data["txhash"];
                 

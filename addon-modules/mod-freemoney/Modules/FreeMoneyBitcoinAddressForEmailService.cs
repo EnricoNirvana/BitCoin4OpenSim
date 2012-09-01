@@ -81,6 +81,11 @@ namespace FreeMoney
                     return "";
                 }
                 string new_address = (string)gc[1].Value;
+                if (!BitcoinAddress.IsValidAddress(new_address)) {
+                    Console.WriteLine("Created new address "+new_address+", but it did not look like a valid address.");
+                    return "";
+                }
+                
                 Console.WriteLine("Created new address "+new_address);
                 return new_address;
 

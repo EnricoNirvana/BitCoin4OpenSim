@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Web;
 using System.Security.Cryptography;
 using MySql.Data.MySqlClient;
+using System.Text.RegularExpressions;
 
 namespace FreeMoney 
 {
@@ -27,6 +28,53 @@ namespace FreeMoney
 
             m_connectionString = dbConnectionString;
             m_config = config;
+
+        }
+
+        public int CountAddressesForAvatar(string user_identifier, bool include_already_assigned) {
+
+            string query = "";
+            if (include_already_assigned) {
+                query = "select count(*) as cnt from opensim_btc_addresses where user_identifier=?user_identifier";
+            } else {
+                query = "select count(*) as cnt from opensim_btc_addresses a left outer join opensim_btc_transactions t on a.btc_address=t.btc_address where a.user_identifier=?user_identifier AND t.confirmation_sent_ts > 0 OR t.id IS NULL;";
+            }
+
+            int num = 0;
+
+            using (MySqlConnection dbcon = new MySqlConnection(m_connectionString))
+            {
+
+                dbcon.Open();
+
+                MySqlCommand cmd = new MySqlCommand( query, dbcon);
+                try
+                {
+                    using (cmd)
+                    {
+                        cmd.Parameters.AddWithValue("?user_identifier", user_identifier);
+
+                        using (MySqlDataReader dbReader = cmd.ExecuteReader())
+                        {
+                            if (dbReader.Read())
+                            {
+                                num = dbReader.GetInt32(0);
+                            }
+                        }
+
+                        cmd.Dispose();
+
+                    }
+                }
+                catch (Exception e)
+                {
+                    //m_log.ErrorFormat("[ASSET DB]: MySQL failure creating asset {0} with name \"{1}\". Error: {2}")
+                    Console.WriteLine("Error counting addresses for avatar: "+e.ToString());
+                }
+
+            }
+
+            return num;
 
         }
 
@@ -51,7 +99,7 @@ namespace FreeMoney
                         {
                             if (dbReader.Read())
                             {
-                                m_btc_address = (string)dbReader["address"];
+                                m_btc_address = (string)dbReader["btc_address"];
                             }
                         }
 
@@ -61,8 +109,9 @@ namespace FreeMoney
 
                     }
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
+                    Console.WriteLine("Error fetching addresses for avatar: "+e.ToString());
                     //m_log.ErrorFormat("[ASSET DB]: MySQL failure creating asset {0} with name \"{1}\". Error: {2}",
                     //return "";
                 }
@@ -92,6 +141,9 @@ namespace FreeMoney
         public bool Create(string user_identifier, string btc_address) {
             m_user_identifier = user_identifier;
             m_btc_address = btc_address;
+            if (!IsValidAddress(m_btc_address)) {
+                return false;
+            }
             return Insert();
         }
 
@@ -138,5 +190,15 @@ namespace FreeMoney
             return false;
 
         }
-    } 
+
+        public static bool IsValidAddress(string address) {
+
+            string pattern = "^[a-zA-Z1-9]{27,35}$";
+            Match m = Regex.Match(address, pattern);
+            return (m.Success); 
+
+        }
+
+    }
+
 }
