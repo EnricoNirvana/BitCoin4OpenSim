@@ -56,15 +56,16 @@ How Bitcoin payments work:
 * You set your price in either Bitcoins or a traditional currency like US Dollars.
 * If your prices are set in a traditional currency, it can be converted into Bitcoins automatically, either at a rate you specify or based on a moving 24-hour average exchange rate.
 * The provides a web page for users to submit one or many Bitcoin addresses to which payments can be made.
-* If a payee does not have an available Bitcoin address, one can be created automatically using the Coinapult service (www.coinapult.com) which stores money on the user's behalf and emails them to ask them to collect it. Uncollected money should be returned to the payer if uncollected after 30 days.
+* The module can be configured so that if a payee does not have an available Bitcoin address, one will be created automatically using the Coinapult service (www.coinapult.com) which stores money on the user's behalf and emails them to ask them to collect it. Coinapult say they will return money to the payer if it is still uncollected after 30 days.
 * Bitcoin payments are confirmed by an external monitoring service. We are currently using bitcoinmonitor.net. You will need to sign up for an API key with them and add it to your configuration.
 * Users can make payments from client software running on their computer or from a web-based e-wallet service. In future it should be possible to build this functionality into the OpenSim viewer, making the experience more seamless.
 
 Warnings about using Bitcoin:
 
 * There may well be all kinds of flaws and security holes in this module, for which the developers accept no responsibility.
-* If you use Coinapult to enable payments to people who haven't registered Bitcoin addresses, any uncollected money could be stolen or lost if the Coinapult people were technically or ethically compromised.
 * The bitcoinmonitor.net service may go down, which would prevent the server from starting new Bitcoin transactions, or completing existing ones.
+* If the bitcoinmonitor.net service malfunctions or is compromised, it may tell you that payments have been completed when they haven't really.
+* If you use Coinapult to enable payments to people who haven't registered Bitcoin addresses, any uncollected money could be stolen or lost if the Coinapult people were technically or ethically compromised.
 * If you use an automated exchange rate average, failure or an external service could stop your users making payments. If it somehow produced incorrect information, you could end up selling things for the wrong prices.
 * The Bitcoin exchange rate can be quite volatile, and the value of your users' Bitcoins may go down as well as up. This may also require you to change your pricing, if you have priced in Bitcoins rather using a traditional currency and letting the system convert it.
 * By default the module accepts payments immediately, as soon as they become visible on the network. In theory it is possible to double-spend money at this point, with the result that the payee never receives it. This can be avoided by checking how far the payment has been confirmed by the network, but this will cause payments to take longer to process. (To be certain of payment, you need to set to 6 confirmations, which takes an average of 1 hour.) 
