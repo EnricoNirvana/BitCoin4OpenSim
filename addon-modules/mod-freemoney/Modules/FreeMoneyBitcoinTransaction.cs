@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Web;
 using System.Security.Cryptography;
 using MySql.Data.MySqlClient;
+using log4net;
 
 // For unix timestamps
 using OpenMetaverse;
@@ -21,6 +22,7 @@ namespace FreeMoney
         private string m_connectionString;
         private Dictionary<string, string> m_config;
 
+        private static readonly ILog m_log = LogManager.GetLogger (MethodBase.GetCurrentMethod ().DeclaringType);
 
         // The payee. This will be a user or group UUID.
         private string m_payee = ""; 
@@ -88,6 +90,9 @@ namespace FreeMoney
             m_notify_url = transaction_params["notify_url"];
             m_num_confirmations_required = num_confirmations_required;
 
+            string pingback_url = (m_config["bitcoin_external_url"] != "") ? m_config["bitcoin_external_url"] : m_base_url;
+            // TODO:: Probably shouldn'thard-code this...
+            pingback_url += "/btcping/?service=bitcoinmonitor";
 
             /*
             if (!$this->_mysqli) {
@@ -103,13 +108,14 @@ namespace FreeMoney
     
             if ( !(Populate("transaction_code") || Create()) ) {
                 m_has_errors = true;
-                Console.WriteLine("could not create");
+                m_log.Warn("[FreeMoney] Unable to find an existing Bitcoin transaction or create a new one.");
                 return false;
             }
-            Console.WriteLine("trying notification service");
+            m_log.Info("[FreeMoney] Contacting notification service.");
 
-            BitcoinNotificationService notification_service = new BitcoinNotificationService(m_config, m_base_url);
-            if (!notification_service.Subscribe(m_btc_address, m_num_confirmations_required)) {
+            BitcoinNotificationService notification_service = new BitcoinNotificationService(m_config);
+
+            if (!notification_service.Subscribe(m_btc_address, m_num_confirmations_required, pingback_url)) {
                 m_has_errors = true;
                 return false;
             }
@@ -284,7 +290,7 @@ namespace FreeMoney
 
         decimal ToBTC(decimal amount, string currency_code) {
 
-            Console.WriteLine("converting");
+            m_log.Info("[FreeMoney] Trying to convert "+amount.ToString()+" "+currency_code+" to Bitcoins.");
 
             // If we have a hard-coded exchange rate, use that. 
             // If not, try to use a dynamic service
@@ -292,12 +298,15 @@ namespace FreeMoney
             // TODO: With the dynamic service, cache the result.
             decimal exchange_rate = Decimal.Parse(m_config["bitcoin_exchange_rate"]);
             if (exchange_rate == 0m) {
-                Console.WriteLine("looking up service");
+                m_log.Info("[FreeMoney] Looking up the exchange rate.");
                 BitcoinExchangeRateService serv = new BitcoinExchangeRateService(m_config);
                 exchange_rate = serv.LookupRate(currency_code);
             }
 
-            return Decimal.Round( (amount / exchange_rate), 4);
+            decimal btc_amount = Decimal.Round( (amount / exchange_rate), 4);
+            m_log.Info("[FreeMoney] "+amount.ToString()+" "+currency_code+" equals "+btc_amount.ToString()+" Bitcoins.");
+            
+            return btc_amount;
 
         }
 
@@ -342,7 +351,7 @@ namespace FreeMoney
 	    public bool MarkConfirmed(int num_confirmations_received) {
 
             if (m_transaction_code == "") {
-                Console.WriteLine("Could not mark confirmed - transaction code not set");
+                m_log.Error("[FreeMoney] Could not mark confirmed - transaction code not set");
                 return false;
             }
 
@@ -371,9 +380,7 @@ namespace FreeMoney
                 }
                 catch (Exception ex)
                 {
-                    //m_log.ErrorFormat("[ASSET DB]: MySQL failure creating asset {0} with name \"{1}\". Error: {2}",
-                    Console.WriteLine("Marking confirmed failed for transaction with id "+m_transaction_code);
-                  Console.WriteLine("Error: {0}",  ex.ToString());
+                    m_log.Error("[FreeMoney] Marking confirmed failed for transaction with id "+m_transaction_code);
                     return false;
                 }
 
@@ -384,7 +391,7 @@ namespace FreeMoney
         }
 
         public bool IsEnoughConfirmations(int num_confirmations_received) {
-            Console.WriteLine("Need "+Convert.ToInt32(m_num_confirmations_required)+" confirmations");
+            //Console.WriteLine("Need "+Convert.ToInt32(m_num_confirmations_required)+" confirmations");
             return num_confirmations_received >= m_num_confirmations_required;
         }
 

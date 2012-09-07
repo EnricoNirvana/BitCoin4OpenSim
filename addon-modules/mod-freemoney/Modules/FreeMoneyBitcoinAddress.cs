@@ -8,6 +8,7 @@ using System.Web;
 using System.Security.Cryptography;
 using MySql.Data.MySqlClient;
 using System.Text.RegularExpressions;
+using log4net;
 
 namespace FreeMoney 
 {
@@ -23,6 +24,7 @@ namespace FreeMoney
         // The number of confirmations we are expected to wait for before considering the payment paid.
         private string m_user_identifier = ""; 
 
+        private static readonly ILog m_log = LogManager.GetLogger (MethodBase.GetCurrentMethod ().DeclaringType);
 
         public BitcoinAddress(string dbConnectionString, Dictionary<string, string> config) {
 
@@ -69,7 +71,7 @@ namespace FreeMoney
                 catch (Exception e)
                 {
                     //m_log.ErrorFormat("[ASSET DB]: MySQL failure creating asset {0} with name \"{1}\". Error: {2}")
-                    Console.WriteLine("Error counting addresses for avatar: "+e.ToString());
+                    m_log.Error("[FreeMoney] Error counting addresses for avatar: "+e.ToString());
                 }
 
             }
@@ -111,7 +113,7 @@ namespace FreeMoney
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("Error fetching addresses for avatar: "+e.ToString());
+                    m_log.Error("[FreeMoney] Error fetching addresses for avatar: "+e.ToString());
                     //m_log.ErrorFormat("[ASSET DB]: MySQL failure creating asset {0} with name \"{1}\". Error: {2}",
                     //return "";
                 }

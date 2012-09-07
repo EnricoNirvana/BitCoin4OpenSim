@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using log4net;
 
 
 // For JSON Decoding 
@@ -22,6 +23,7 @@ namespace FreeMoney
     {
 
         private Dictionary<string, string> m_config;
+        private static readonly ILog m_log = LogManager.GetLogger (MethodBase.GetCurrentMethod ().DeclaringType);
 
         public BitcoinExchangeRateService(Dictionary<string, string> config) {
             m_config = config;

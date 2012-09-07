@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Web;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using log4net;
 
 namespace FreeMoney 
 {
@@ -15,6 +16,7 @@ namespace FreeMoney
     {
 
         private Dictionary<string, string> m_config;
+        private static readonly ILog m_log = LogManager.GetLogger (MethodBase.GetCurrentMethod ().DeclaringType);
 
         public BitcoinAddressForEmailService(Dictionary<string, string> config) {
             m_config = config;
@@ -46,12 +48,12 @@ namespace FreeMoney
             ASCIIEncoding encoding = new ASCIIEncoding ();
             byte[] byte1 = encoding.GetBytes (post_data);
 
-            Console.WriteLine("sending post data"+post_data);
+            m_log.Info("[FreeMoney] Sending post data"+post_data);
 
             httpWebRequest.ContentType = "application/x-www-form-urlencoded; charset=UTF-8";
             httpWebRequest.ContentLength = byte1.Length;
 
-            Console.WriteLine("post length:"+httpWebRequest.ContentLength.ToString());
+            m_log.Info("[FreeMoney] Post length:"+httpWebRequest.ContentLength.ToString());
 
             Stream newStream = httpWebRequest.GetRequestStream ();
             newStream.Write (byte1, 0, byte1.Length);
@@ -65,11 +67,11 @@ namespace FreeMoney
             }
 
             if (httpWebResponse.StatusCode != HttpStatusCode.OK) {
-                Console.WriteLine("address service response code was ng");
+                m_log.Warn("[FreeMoney] address service response code was ng");
                 return "";
             }
 
-            Console.WriteLine(response);
+            //Console.WriteLine(response);
 
             string pattern = "\\\"bitcoin\\:(.*?)\\\"";
             Match m = Regex.Match(response, pattern, RegexOptions.Multiline);
@@ -77,20 +79,20 @@ namespace FreeMoney
 
                 GroupCollection gc = m.Groups;
                 if (gc.Count < 2) {
-                    Console.WriteLine("not found");
+                    m_log.Warn("[FreeMoney] Could not find an address in the response from the email service.");
                     return "";
                 }
                 string new_address = (string)gc[1].Value;
                 if (!BitcoinAddress.IsValidAddress(new_address)) {
-                    Console.WriteLine("Created new address "+new_address+", but it did not look like a valid address.");
+                    m_log.Warn("[FreeMoney] Created new address "+new_address+", but it did not look like a valid address.");
                     return "";
                 }
                 
-                Console.WriteLine("Created new address "+new_address);
+                m_log.Info("[FreeMoney] Created new address "+new_address);
                 return new_address;
 
             } else {
-                Console.WriteLine("not found");
+                m_log.Warn("[FreeMoney] Could not find an address in the response from the email service.");
             }
 
             return "";

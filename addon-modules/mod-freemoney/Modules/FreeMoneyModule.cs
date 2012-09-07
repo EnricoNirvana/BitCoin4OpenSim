@@ -209,7 +209,7 @@ namespace FreeMoney
                 }
                 
                 m_log.Info ("[FreeMoney] Start: " + e.sender + " wants to pay object " + e.receiver + " owned by " +
-                            sop.OwnerID + " with email " + email + " US$ cents " + e.amount);
+                            sop.OwnerID + " with email " + email + " " + m_gridCurrencySmallDenominationText + " " + e.amount);
                 
                 txn = new FreeMoneyTransaction (e.sender, sop.OwnerID, email, e.amount, scene, e.receiver,
                                              e.description + " T:" + e.transactiontype,
@@ -223,7 +223,7 @@ namespace FreeMoney
                 }
                 
                 m_log.Info ("[FreeMoney] Start: " + e.sender + " wants to pay user " + e.receiver + " with email " +
-                            email + " US$ cents " + e.amount);
+                            email + " " + m_gridCurrencySmallDenominationText + " " + e.amount);
                 
                 txn = new FreeMoneyTransaction (e.sender, e.receiver, email, e.amount, scene, e.description + " T:" +
                                              e.transactiontype, FreeMoneyTransaction.InternalTransactionType.Payment);
@@ -253,7 +253,7 @@ namespace FreeMoney
                 if (transaction.ObjectID == UUID.Zero) {
                     // User 2 User Transaction
                     m_log.Info ("[FreeMoney] Success: " + transaction.From + " did pay user " +
-                                transaction.To + " US$ cents " + transaction.Amount);
+                                transaction.To + " " + m_gridCurrencySmallDenominationText + " " + transaction.Amount);
                     
                     IUserAccountService userAccountService = m_scenes[0].UserAccountService;
                     UserAccount ua;
@@ -271,7 +271,7 @@ namespace FreeMoney
                     if (OnObjectPaid != null) {
                         m_log.Info ("[FreeMoney] Success: " + transaction.From + " did pay object " +
                                     transaction.ObjectID + " owned by " + transaction.To +
-                                    " US$ cents " + transaction.Amount);
+                                    " " + m_gridCurrencySmallDenominationText + " " + transaction.Amount);
                         
                         OnObjectPaid (transaction.ObjectID, transaction.From, transaction.Amount);
                     }
@@ -288,7 +288,7 @@ namespace FreeMoney
                     }
                     
                     m_log.Info ("[FreeMoney] Success: " + transaction.From + " did buy object " +
-                                transaction.ObjectID + " from " + transaction.To + " paying US$ cents " +
+                                transaction.ObjectID + " from " + transaction.To + " paying " + m_gridCurrencySmallDenominationText + " " +
                                 transaction.Amount);
                     
                     IBuySellModule module = s.RequestModuleInterface<IBuySellModule> ();
@@ -319,7 +319,7 @@ namespace FreeMoney
                 }
                 
                 m_log.Info ("[FreeMoney] Success: " + e.agentId + " did buy land from " + e.parcelOwnerID +
-                            " paying US$ cents " + e.parcelPrice);
+                            " paying " + m_gridCurrencySmallDenominationText + " " + e.parcelPrice);
                 
                 land.UpdateLandSold (e.agentId, e.groupId, e.groupOwned, (uint)e.transactionID,
                                      e.parcelPrice, e.parcelArea);
@@ -357,7 +357,7 @@ namespace FreeMoney
                 btc_session_id = (string)request_hash["btc_session_id"];
             }
 
-            Console.WriteLine("btc session id is "+btc_session_id);
+            //Console.WriteLine("btc session id is "+btc_session_id);
 
             if (btc_session_id == "") {
                 has_errors = true;
@@ -427,7 +427,7 @@ namespace FreeMoney
             } catch (IOException) {
                 template = "Error: bitcoin-register-template.htm does not exist.";
                 //m_log.Error ("[FreeMoney] Unable to load template file.");
-                Console.WriteLine("Could not load template file");
+                m_log.Error("Could not load template file bitcoin-register-template.htm");
                 has_errors = true;
             }
 
@@ -493,10 +493,10 @@ namespace FreeMoney
             //Dictionary<string, object> postvals = ServerUtils.ParseQueryString ((string)request["body"]);
             string post_data = (string)request_hash["body"];
 
-            BitcoinNotificationService service = new BitcoinNotificationService(m_btcconfig, base_url);
+            BitcoinNotificationService service = new BitcoinNotificationService(m_btcconfig);
 
             if (!service.ParseRequestBody(post_data)) {
-                Console.WriteLine("Could not parse post params");
+                m_log.Error("[FreeMoney] Could not parse post params");
                 return error_response;
             }
 
@@ -510,13 +510,13 @@ namespace FreeMoney
             BitcoinTransaction btc_trans = new BitcoinTransaction(m_connectionString, m_btcconfig, base_url);
             
             if (!btc_trans.PopulateByBtcAddress(address)) {
-                Console.WriteLine("Could not find btc_trans");
+                m_log.Error("[FreeMoney] Could not find btc_trans");
                 return error_response;
             }
 
             // Always mark the latest number of confirmations, assuming it's more than we had last time.
             if (!btc_trans.MarkConfirmed(num_confirmations_received)) {
-                Console.WriteLine("Could not mark confirmed in database"); 
+                m_log.Error("[FreeMoney] Could not mark confirmed in database"); 
                 //print_simple_and_exit("Could not mark btc_trans confirmed despite receiving ".htmlentities($num_confirmations_received)." confirmations.");
                 return error_response;
             }
@@ -524,7 +524,7 @@ namespace FreeMoney
             // If it's less than we need, there should be nothing more to do.
             //if (num_confirmations_received < btc_trans.num_confirmations_required) 
             if (!btc_trans.IsEnoughConfirmations(num_confirmations_received)) {
-                Console.WriteLine(Convert.ToInt32(num_confirmations_received)+" - confirmations not enough yet"); 
+                m_log.Info("[FreeMoney] Got "+ num_confirmations_received.ToString()+" confirmations for address " + address + ", but that is not enough to complete the transaction."); 
                 return error_response;
                 //print_simple_and_exit("Not enough confirmations, ignoring.", 200);
             }
@@ -550,7 +550,7 @@ namespace FreeMoney
 
             if (!btc_trans.MarkNotified()) {
                 //print_simple_and_exit("Notified sim, but unable to record the fact that we did.");
-                Console.WriteLine("Could not mark notified"); 
+                m_log.Error("[FreeMoney] Could not mark notified"); 
                 return error_response;
             }
 
@@ -591,6 +591,11 @@ namespace FreeMoney
 
             BitcoinTransaction btc_trans = InitializeBitcoinTransaction(txn, baseUrl);
             has_errors = btc_trans.HasErrors();
+
+            if (has_errors) {
+                string error_message = "<p><strong>Sorry, I couldn't set up this payment.</strong></p>";
+                return ShowUserPage(request, baseUrl, txn, error_message); 
+            }
  
             string user_identifier = txn.From.ToString();
             BitcoinAddress count_btc_addr = new BitcoinAddress(m_connectionString, m_btcconfig);
@@ -602,18 +607,14 @@ namespace FreeMoney
             //TODO put HttpUtility back
             replacements.Add ("{BTC_SESSION_ID}", GetSessionKey( txn.From ).ToString());
             bool is_submit = true; // TODO
-            if (is_submit && !has_errors) {
+            if (is_submit) {
                 replacements.Add ("{BTC_ERRORS}",  "");
                 replacements.Add ("{BTC_DISABLE_COMPLETE_START}",  "<!--");
                 replacements.Add ("{BTC_DISABLE_COMPLETE_END}",  "-->");
                 replacements.Add ("{BTC_DISABLE_INCOMPLETE_START}",  "");
                 replacements.Add ("{BTC_DISABLE_INCOMPLETE_END}",  "");
             } else {
-                if (has_errors) {
-                    replacements.Add ("{BTC_ERRORS}", "<p><strong>Sorry, I couldn't set up this payment.</strong></p>");
-                } else {
-                    replacements.Add ("{BTC_ERRORS}",  "");
-                }
+                replacements.Add ("{BTC_ERRORS}",  "");
                 replacements.Add ("{BTC_DISABLE_INCOMPLETE_START}",  "<!--");
                 replacements.Add ("{BTC_DISABLE_INCOMPLETE_END}",  "-->");
                 replacements.Add ("{BTC_DISABLE_COMPLETE_START}",  "");
@@ -625,13 +626,14 @@ namespace FreeMoney
             replacements.Add ("{BTC_COUNT_USABLE_ADDRESSES}", count_usable_addresses.ToString());
 
             string template;
+            string template_name = "bitcoin-pay-template.htm";
 
             try {
-                template = File.ReadAllText ("bitcoin-pay-template.htm");
+                template = File.ReadAllText (template_name);
             } catch (IOException) {
-                template = "Error: bitcoin-register-template.htm does not exist.";
+                template = "Error: bitcoin-pay-template.htm does not exist.";
                 //m_log.Error ("[FreeMoney] Unable to load template file.");
-                Console.WriteLine("Could not load template file");
+                m_log.Error("[FreeMoney] Could not load template file bitcoin-pay-template.htm");
                 has_errors = true;
             }
 
@@ -652,28 +654,10 @@ namespace FreeMoney
 
         }
 
-        public Hashtable UserPage (Hashtable request)
-        {
-            UUID txnID = new UUID ((string)request["txn"]);
-            
-            if (!m_transactionsInProgress.ContainsKey (txnID)) {
-                Hashtable ereply = new Hashtable ();
-                
-                ereply["int_response_code"] = 404;
-                // 200 OK
-                ereply["str_response_string"] = "Invalid Transaction";
-                ereply["content_type"] = "text/html";
-                
-                return ereply;
-            }
-            
-            FreeMoneyTransaction txn = m_transactionsInProgress[txnID];
-            
-            string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
-            
-            // Ouch. (This is the FreeMoney Request URL)
-            // TODO: Add in a return page
-            // TODO: Add in a cancel page
+        // This is called by the UserPage URL callback
+        // ...or by another page if there's an error. 
+        private Hashtable ShowUserPage(Hashtable request, string baseUrl, FreeMoneyTransaction txn, string error_message) {
+
             string url = m_ppprotocol+"://" + m_ppurl + m_pprequesturi+"?cmd=_xclick" + "&business=" +
                 HttpUtility.UrlEncode (txn.SellersEmail) + "&item_name=" + HttpUtility.UrlEncode (txn.Description) +
                     "&item_number=" + HttpUtility.UrlEncode (txn.TxID.ToString ()) + "&amount=" +
@@ -706,6 +690,7 @@ namespace FreeMoney
             replacements.Add ("{BTCBILLINGHIDDENFIELDS}", btcfields);
             replacements.Add ("{OBJECTID}", HttpUtility.HtmlEncode(txn.ObjectID.ToString ()));
             replacements.Add ("{SELLEREMAIL}", HttpUtility.HtmlEncode(txn.SellersEmail));
+            replacements.Add ("{BTC_ERRORS}",  error_message);
             
             string template;
             
@@ -728,6 +713,31 @@ namespace FreeMoney
             reply["content_type"] = "text/html";
             
             return reply;
+
+
+        }
+
+
+        public Hashtable UserPage (Hashtable request)
+        {
+            UUID txnID = new UUID ((string)request["txn"]);
+            
+            if (!m_transactionsInProgress.ContainsKey (txnID)) {
+                Hashtable ereply = new Hashtable ();
+                
+                ereply["int_response_code"] = 404;
+                // 200 OK
+                ereply["str_response_string"] = "Invalid Transaction";
+                ereply["content_type"] = "text/html";
+                
+                return ereply;
+            }
+            
+            FreeMoneyTransaction txn = m_transactionsInProgress[txnID];
+            
+            string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
+            
+            return ShowUserPage(request, baseUrl, txn, "");
 
         }
 
@@ -996,6 +1006,8 @@ namespace FreeMoney
                 PriceGroupCreate = economyConfig.GetInt("PriceGroupCreate", -1);
             }
 
+            m_log.Info ("[FreeMoney] Getting btc config.");
+
             m_gridCurrencyCode = config.GetString("GridCurrencyCode", "USD");
             m_gridCurrencyText = config.GetString("GridCurrencyText", "US$");
             m_gridCurrencySmallDenominationText  = config.GetString("GridCurrencySmallDenominationText", "US$ cents");
@@ -1018,6 +1030,9 @@ namespace FreeMoney
             m_btcconfig.Add("bitcoin_ping_service_1_agent_name", config.GetString ("BitcoinConfirmationService1AgentName", "opensim_bitcoin_dev_agent"));
             m_btcconfig.Add("bitcoin_ping_service_1_base_url", config.GetString ("BitcoinConfirmationService1BaseURL", ""));
 
+            // If you put an agent ID in the config, this will save the money server somework.
+            m_btcconfig.Add("bitcoin_ping_service_1_agent_id", config.GetString ("BitcoinConfirmationService1AgentID", ""));
+
             m_btcconfig.Add("bitcoin_ping_service_1_accesskey", config.GetString ("BitcoinConfirmationService1AccessKey", ""));
             m_btcconfig.Add("bitcoin_ping_service_1_verificationkey", config.GetString ("BitcoinConfirmationService1VerificationKey", ""));
 
@@ -1026,6 +1041,10 @@ namespace FreeMoney
             // Fixed exchange rate.
             // If this is zero, we'll use an external lookup service.
             m_btcconfig.Add("bitcoin_exchange_rate", config.GetString("BitcoinExchangeRate", "0"));
+
+
+            //string baseUrl = m_scenes[0].RegionInfo.ExternalHostName + ":" + m_scenes[0].RegionInfo.HttpPort;
+            m_log.Info ("[FreeMoney] Got btc config.");
 
             m_connectionString = "" +
                 "Server="  + m_btcconfig["bitcoin_db_host"]+";" +
@@ -1234,7 +1253,7 @@ namespace FreeMoney
             }
             
             m_log.Info ("[FreeMoney] Start: " + agentID + " wants to buy object " + sop.UUID + " from " + sop.OwnerID +
-                        " with email " + email + " costing US$ cents " + salePrice);
+                        " with email " + email + " costing " + m_gridCurrencySmallDenominationText + " " + salePrice);
             
             FreeMoneyTransaction txn = new FreeMoneyTransaction (agentID, sop.OwnerID, email, salePrice, scene, sop.UUID,
                                                            "Item Purchase - " + sop.Name + " (" + saleType + ")",
@@ -1281,7 +1300,7 @@ namespace FreeMoney
                 base_url = m_externalBaseURL;
             }
 
-            BitcoinTransaction btc_trans = new BitcoinTransaction(m_connectionString, m_btcconfig, base_url);
+            BitcoinTransaction btc_trans = new BitcoinTransaction(m_connectionString, m_btcconfig, "http://"+base_url);
             btc_trans.Initialize(transaction_params, m_btcNumberOfConfirmationsRequired);
 
             return btc_trans;
@@ -1472,7 +1491,7 @@ namespace FreeMoney
             }
             
             m_log.Info ("[FreeMoney] Start: " + e.agentId + " wants to buy land from " + e.parcelOwnerID +
-                        " with email " + email + " costing US$ cents " + e.parcelPrice);
+                        " with email " + email + " costing " + m_gridCurrencySmallDenominationText +" " + e.parcelPrice);
             
             FreeMoneyTransaction txn;
             txn = new FreeMoneyTransaction (e.agentId, e.parcelOwnerID, email, e.parcelPrice, scene,
