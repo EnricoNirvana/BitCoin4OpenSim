@@ -28,6 +28,7 @@ AS OF 2012-09-07, THIS MODULE BARELY WORKS, AND MAY WELL GO HORRIBLY WRONG.
 * All transactions are real hard transactions, either in a regular currency like US Dollars or in Bitcoin.
 * The server does not have access to users' money. It only handles information that allows people to pay money _to_ the user, namely email or Bitcoin addresses.
 * You can enable either PayPal, Bitcoin or both. See below for the details about each of these payment methods.
+* Payments are made by following the instructions on a web page provided by URL dialog.
 * This module a heavily altered version of Mod-PayPal, originally developed by Adam Frisby and currently maintained by Snoopy Pfeffer. 
 * If you only need PayPal not Bitcoin, you may prefer to use the original Mod-PayPal:
   https://github.com/SnoopyPfeffer/Mod-PayPal.
@@ -35,7 +36,7 @@ AS OF 2012-09-07, THIS MODULE BARELY WORKS, AND MAY WELL GO HORRIBLY WRONG.
 
 How PayPal payments work:
 
-* Prices are set in in some fraction of a Dollar / Bitcoin, like US$ cents or 1000ths of a Bitcoin.
+* Prices are set in US Cents, or some similar denomination small enough not to need fractions.
 * PayPal accepts payment to email addresses. You can specify the email addresses of sellers in the configuration file, or use the email addresses registered for each user. 
 * If a user has not registered with PayPal, PayPal will keep the money for them and send them an email asking them to claim it.
 * When transactions are completed, PayPal payments are confirmed by the buyer through PayPal's standard purchasing interface (IPN) and inventory delivered etc. 
@@ -65,7 +66,7 @@ Warnings about using Bitcoin:
 * If you use Coinapult to enable payments to people who haven't registered Bitcoin addresses, any uncollected money could be stolen or lost if the Coinapult people were technically or ethically compromised.
 * The bitcoinmonitor.net service may go down, which would prevent the server from starting new Bitcoin transactions, or completing existing ones.
 * If you use an automated exchange rate average, failure or an external service could stop your users making payments. If it somehow produced incorrect information, you could end up selling things for the wrong prices.
-* The Bitcoin exchange rate can be quite volatile, and the value of your users' Bitcoins may go down as well as up.
+* The Bitcoin exchange rate can be quite volatile, and the value of your users' Bitcoins may go down as well as up. This may also require you to change your pricing, if you have priced in Bitcoins rather using a traditional currency and letting the system convert it.
 * By default the module accepts payments immediately, as soon as they become visible on the network. In theory it is possible to double-spend money at this point, with the result that the payee never receives it. This can be avoided by checking how far the payment has been confirmed by the network, but this will cause payments to take longer to process. (To be certain of payment, you need to set to 6 confirmations, which takes an average of 1 hour.) 
 
 
