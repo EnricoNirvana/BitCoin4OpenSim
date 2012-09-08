@@ -1,5 +1,5 @@
 <?xml version="1.0" ?>
-<Project frameworkVersion="v3_5" name="Mod.PayPal" path="addon-modules/mod-paypal/Modules" type="Library">
+<Project frameworkVersion="v3_5" name="Mod.FreeMoney" path="addon-modules/mod-freemoney/Modules" type="Library">
   <Configuration name="Debug">
     <Options>
       <OutputPath>../../../bin/</OutputPath>
@@ -14,9 +14,12 @@
   <ReferencePath>../../../bin/</ReferencePath>
   <Reference name="System"/>
   <Reference name="System.Web"/>
-  <Reference name="OpenMetaverseTypes" path="../../../bin/"/>
-  <Reference name="Nini" path="../../../bin/"/>
-  <Reference name="log4net" path="../../../bin/"/>
+  <Reference name="OpenMetaverseTypes"/>
+  <Reference name="OpenMetaverse"/>
+  <Reference name="MySql.Data"/>
+  <Reference name="Newtonsoft.Json.Net20"/>
+  <Reference name="Nini"/>
+  <Reference name="log4net"/>
   <Reference name="OpenSim.Framework"/>
   <Reference name="OpenSim.Framework.Servers"/>
   <Reference name="OpenSim.Framework.Servers.HttpServer"/>
@@ -25,10 +28,7 @@
   <Reference name="OpenSim.Framework.Communications"/>
   <Reference name="OpenSim.Server.Base"/>
   <Reference name="OpenSim.Services.Interfaces"/>
-  <Reference name="MySql.Data.MySqlClient" path="../../../bin/"/>
-  <Reference name="Newtonsoft.Json" path="../../../bin/"/>
-  <Reference name="Newtonsoft.Json.Linq" path="../../../bin/"/>
-  <Reference name="XMLRPC" path="../../../bin/"/>
+  <Reference name="XMLRPC"/>
  
   <!-- To allow regions to have mono addins -->
   <Reference name="Mono.Addins" path="../../../bin/"/>

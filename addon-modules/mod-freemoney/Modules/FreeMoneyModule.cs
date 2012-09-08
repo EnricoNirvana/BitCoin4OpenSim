@@ -54,10 +54,8 @@ using Mono.Addins;
 
 
 
-/*
 [assembly: Addin("FreeMoney", "0.1")]
 [assembly: AddinDependency("OpenSim", "0.5")]
-*/
 
 namespace FreeMoney
 {
@@ -920,7 +918,7 @@ namespace FreeMoney
         #region Implementation of IRegionModuleBase
 
         public string Name {
-            get { return "FreeMoneyMoneyModule"; }
+            get { return "FreeMoneyModule"; }
         }
 
         public Type ReplaceableInterface {
@@ -971,7 +969,7 @@ namespace FreeMoney
 
             if (startupConfig != null)
             {
-                m_enabled = (startupConfig.GetString("economymodule", "FreeMoneyMoneyModule") == "FreeMoneyMoneyModule");
+                m_enabled = (startupConfig.GetString("economymodule", "FreeMoneyModule") == "FreeMoneyModule");
 
                 if (!m_enabled) {
                     m_log.Info ("[FreeMoney] Not enabled. (to enable set \"economymodule = FreeMoneyMoneyModule\" in [Startup])");
