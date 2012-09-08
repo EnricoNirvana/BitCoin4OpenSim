@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<Addin id="OpenSim.Region.OptionalModules" version="0.2">
+    <references basedir="${project::get-base-directory()}">
+        <include name="Newtonsoft.Json.Net20.dll" />
+        <include name="MySql.Data.dll" />
+    </references>
+</Addin>
