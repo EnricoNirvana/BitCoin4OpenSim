@@ -1,0 +1,17 @@
+Installing the Free Money Server
+
+A) Sign up for an API key at www.bitcoinmonitor.net. 
+
+B) Checkout the OpenSim source code and make sure you can install it (something like ./runprebuild.sh && nant).
+
+C) Create the database tables:
+    1) Edit the file db/create_tables.sql to change the 'somepassword' to a password of your own. For security reasons it is probably better to use a different username/password to the one used by the rest of your OpenSim install.
+    2) mysql -u root -p < db/create_tables.sql
+
+D) Add the Free Money Server files:
+    1) Copy the contents of addon-modules/ to your addon-modules/ directory.
+    2) Copy the contents of files-for-bin-dir to your bin/ directory. These are HTML templates that you may wish to customize.
+
+E) Build OpenSim as you did in step (A).
+
+F) Configure the 
