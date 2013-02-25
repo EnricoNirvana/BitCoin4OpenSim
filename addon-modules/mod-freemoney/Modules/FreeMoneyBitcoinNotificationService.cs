@@ -32,7 +32,10 @@ namespace FreeMoney
         private string m_btc_address = "";
         private int m_num_confirmations_received = 0;
         private decimal m_amount_received = 0.0m;
+
         private string m_signature = "";
+
+        private string m_concatenated_data = "";
 
         public BitcoinNotificationService(Dictionary<string, string> config) {
             m_config = config;
@@ -332,6 +335,7 @@ namespace FreeMoney
 
                 //Dictionary<string, string> values = JsonConvert.DeserializeObject<Dictionary<string, string>>(post_body);
                 JObject jo = JObject.Parse(post_body);
+                m_log.Error("[FreeMoney] Got post body: "+post_body);
                 JObject signed_data = (JObject)jo["signed_data"];
     
                 m_signature = (string)jo["signature"];
@@ -341,6 +345,18 @@ namespace FreeMoney
                 //m_txhash = (string)signed_data["txhash"];
                 
                 //m_signvalues.TryGetValue("signature", out sig);
+
+                // Used to validate later on
+                m_concatenated_data = ""
+                    + (string)jo["address"] 
+                    + (string)jo["agent"] 
+                    + (string)jo["amount"] 
+                    + (string)jo["amount_btc"] 
+                    + (string)jo["confirmations"] 
+                    + (string)jo["created"] 
+                    + (string)jo["userdata"] 
+                    + (string)jo["txhash"] 
+                ;
 
  
             } catch (Exception) {
@@ -353,7 +369,29 @@ namespace FreeMoney
         }
 
         public bool IsValid() {
+
+            // step 1, calculate MD5 hash from input
+            MD5 md5 = System.Security.Cryptography.MD5.Create();
+            string sigdata = m_concatenated_data + m_config["bitcoin_ping_service_1_verificationkey"];
+
+            m_log.Error("[FreeMoney] making sig for data "+sigdata);
+ 
+            byte[] inputBytes = System.Text.Encoding.ASCII.GetBytes(sigdata);
+            byte[] hash = md5.ComputeHash(inputBytes);
+
+            // step 2, convert byte array to hex string
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < hash.Length; i++)
+            {
+                sb.Append(hash[i].ToString("x2"));
+            }
+            string calculated_signature = sb.ToString();
+            if (calculated_signature != m_signature) {
+                m_log.Error("[FreeMoney] Signature mismatch: "+calculated_signature + " vs " + m_signature);
+            }
+
             return true;
+
         }
 
     } 
