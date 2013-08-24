@@ -14,4 +14,4 @@ D) Add the Free Money Server files:
 
 E) Build OpenSim as you did in step (A).
 
-F) Configure the 
+F) Configure the ini files.
