@@ -140,6 +140,32 @@ namespace FreeMoney
 
         }
 
+        public bool CreateFromLine(string user_identifier, string btc_address_line) {
+
+            // Create as is if we can
+            if (IsValidAddress(btc_address_line)) {
+                return Create(user_identifier, btc_address_line);
+            }
+
+            // CSV export, as exported by the standard clieng:
+            // "ed20110831","1L5yiXZCjUrvfPr5LPFFqnJdW9fcecBojS"
+            string pattern = "^\".*?\",\"([a-zA-Z1-9]{27,35})\"$";
+            Match m = Regex.Match(btc_address_line, pattern);
+            if (m.Success) {
+                return Create(user_identifier, m.Groups[1].Value);
+            }
+
+            // Anything the right length in quotes
+            string pattern2 = "\"([a-zA-Z1-9]{27,35})\"";
+            Match m2 = Regex.Match(btc_address_line, pattern2);
+            if (m2.Success) {
+                return Create(user_identifier, m2.Groups[1].Value);
+            }
+
+            return false;
+
+        }
+
         public bool Create(string user_identifier, string btc_address) {
             m_user_identifier = user_identifier;
             m_btc_address = btc_address;
