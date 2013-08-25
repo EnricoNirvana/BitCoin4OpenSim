@@ -86,7 +86,7 @@ namespace FreeMoney
 
         private string m_gridCurrencyCode = "USD";
         private string m_gridCurrencyText = "US$";
-        private string m_gridCurrencySmallDenominationText = "US$ cents";
+        private string m_gridCurrencySmallDenominationText = "BitCoins";
         private decimal m_gridCurrencySmallDenominationFraction = 100m;
         
         private readonly object m_setupLock = new object ();
@@ -111,12 +111,12 @@ namespace FreeMoney
 
         private readonly List<Scene> m_scenes = new List<Scene> ();
 
-        private const int m_maxBalance = 100000;
+        private const int m_maxBalance = 1;
 
         private readonly Dictionary<UUID, FreeMoneyTransaction> m_transactionsInProgress =
             new Dictionary<UUID, FreeMoneyTransaction> ();
 
-        private bool m_allowGridEmails = false;
+        private bool m_allowGridEmails = true;
         private bool m_allowGroups = false;
         private bool m_balanceOnEntry = true;
         private string m_messageOnEntry = "PayPal Money System:  OS$ 100 = US$ 1.00";
@@ -825,11 +825,7 @@ namespace FreeMoney
             client.OnObjectBuy += ObjectBuy;
         }
 
-        /*private void EconomyDataRequestHandler(IClientAPI client)
-        {
-            throw new NotImplementedException();
-        }*/
-
+       
         /// <summary>
         /// Event Handler for when a root agent becomes a root agent
         /// </summary>
@@ -1384,7 +1380,7 @@ namespace FreeMoney
             m_log.Info ("[FreeMoney] Loading predefined users and groups.");
 
             // Users
-            IConfig users = m_config.Configs["PayPal Users"];
+            IConfig users = m_config.Configs["FreeMoney Users"];
             
             if (null == users) {
                 m_log.Warn ("[FreeMoney] No users specified in local ini file.");
@@ -1435,7 +1431,7 @@ namespace FreeMoney
             }
             
             // Groups
-            IConfig groups = m_config.Configs["PayPal Groups"];
+            IConfig groups = m_config.Configs["FreeMoney Groups"];
             
             if (!m_allowGroups || null == groups) {
                 m_log.Warn ("[FreeMoney] Groups disabled or no groups specified in local ini file.");

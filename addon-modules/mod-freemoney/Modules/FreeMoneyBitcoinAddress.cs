@@ -180,7 +180,7 @@ namespace FreeMoney
 
             string query = "";
 
-            query += "INSERT INTO opensim_btc_addresses (";
+            query += "INSERT INTO opensim_btc.opensim_btc_addresses (";
             query += "btc_address, ";
             query += "user_identifier";
             query += ") values(";
